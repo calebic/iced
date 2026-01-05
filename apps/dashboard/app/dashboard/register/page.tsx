@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getDashboardApiUrl } from "@/lib/api";
 
 const RegisterPage = () => {
   const router = useRouter();
@@ -48,7 +49,7 @@ const RegisterPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/dashboard/auth/register", {
+      const response = await fetch(getDashboardApiUrl("/dashboard/auth/register"), {
         method: "POST",
         credentials: "include",
         headers: {

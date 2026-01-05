@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getDashboardApiUrl } from "@/lib/api";
 
 const formatDate = (value: string | Date) =>
   new Date(value).toLocaleString(undefined, {
@@ -59,7 +60,7 @@ const HomePage = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/dashboard/apps", {
+      const response = await fetch(getDashboardApiUrl("/dashboard/apps"), {
         credentials: "include",
       });
 
@@ -109,10 +110,10 @@ const HomePage = () => {
 
       try {
         const [usersResponse, ranksResponse] = await Promise.all([
-          fetch(`/dashboard/apps/${expandedAppId}/users`, {
+          fetch(getDashboardApiUrl(`/dashboard/apps/${expandedAppId}/users`), {
             credentials: "include",
           }),
-          fetch(`/dashboard/apps/${expandedAppId}/ranks`, {
+          fetch(getDashboardApiUrl(`/dashboard/apps/${expandedAppId}/ranks`), {
             credentials: "include",
           }),
         ]);
@@ -192,14 +193,17 @@ const HomePage = () => {
     }));
 
     try {
-      const response = await fetch(`/dashboard/apps/${appId}/users/${userId}`, {
+      const response = await fetch(
+        getDashboardApiUrl(`/dashboard/apps/${appId}/users/${userId}`),
+        {
         method: "PATCH",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(updates),
-      });
+      },
+      );
 
       if (!response.ok) {
       setUsersByApp((prev) => ({
@@ -292,7 +296,7 @@ const HomePage = () => {
     setIsCreating(true);
 
     try {
-      const response = await fetch("/dashboard/apps", {
+      const response = await fetch(getDashboardApiUrl("/dashboard/apps"), {
         method: "POST",
         credentials: "include",
         headers: {
@@ -320,7 +324,7 @@ const HomePage = () => {
     setIsLoggingOut(true);
 
     try {
-      const response = await fetch("/dashboard/auth/logout", {
+      const response = await fetch(getDashboardApiUrl("/dashboard/auth/logout"), {
         method: "POST",
         credentials: "include",
       });
