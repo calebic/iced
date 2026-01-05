@@ -9,6 +9,7 @@ import { registerDashboardRoutes } from "./routes/dashboard";
 import { registerV1Routes } from "./routes/v1";
 import { registerApplicationRoutes } from "./routes/applications";
 import { registerRankPermissionRoutes } from "./routes/ranks";
+import { registerLicenseRoutes } from "./routes/licenses";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -47,6 +48,7 @@ export const buildServer = () => {
   app.register(registerDashboardRoutes, { prefix: "/dashboard" });
   app.register(registerApplicationRoutes, { prefix: "/dashboard" });
   app.register(registerRankPermissionRoutes, { prefix: "/dashboard" });
+  app.register(registerLicenseRoutes, { prefix: "/dashboard" });
   app.register(registerV1Routes);
 
   app.get("/health", async () => ({ status: "ok" }));
