@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -29,6 +30,10 @@ export const buildServer = () => {
   });
 
   app.register(cookie);
+  app.register(cors, {
+    origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/],
+    credentials: true,
+  });
   app.register(helmet);
   app.register(rateLimit, {
     max: 100,
