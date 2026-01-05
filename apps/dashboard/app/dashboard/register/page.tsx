@@ -9,18 +9,28 @@ import { Label } from "@/components/ui/label";
 
 const RegisterPage = () => {
   const router = useRouter();
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const validate = () => {
+    if (!username.trim()) {
+      return "Please enter a username.";
+    }
+
     if (!email.includes("@")) {
       return "Please enter a valid email address.";
     }
 
     if (password.length < 8) {
       return "Password must be at least 8 characters.";
+    }
+
+    if (password !== confirmPassword) {
+      return "Passwords do not match.";
     }
 
     return "";
@@ -44,11 +54,20 @@ const RegisterPage = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username: username.trim(), email, password }),
       });
 
       if (!response.ok) {
-        setError("Registration failed. Please try again.");
+        let message = "Registration failed. Please try again.";
+        try {
+          const payload = await response.json();
+          if (payload?.error?.message) {
+            message = payload.error.message;
+          }
+        } catch {
+          // Ignore JSON parsing errors.
+        }
+        setError(message);
         return;
       }
 
@@ -69,6 +88,19 @@ const RegisterPage = () => {
         </CardHeader>
         <CardContent>
           <form className="space-y-6" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="yourname"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -91,6 +123,19 @@ const RegisterPage = () => {
                 placeholder="Create a password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Re-enter your password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
                 required
               />
