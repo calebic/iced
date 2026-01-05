@@ -7,11 +7,15 @@ import { LicenseService } from "../services/licenseService";
 
 const CreateLicenseSchema = z.object({
   rank_id: z.string().uuid(),
+  pool_id: z.string().uuid().optional(),
+  max_uses: z.number().int().positive().optional(),
   expires_at: z.string().datetime().optional(),
 });
 
 const BulkCreateSchema = z.object({
   rank_id: z.string().uuid(),
+  pool_id: z.string().uuid().optional(),
+  max_uses: z.number().int().positive().optional(),
   count: z.number().int().positive().max(1000),
   expires_at: z.string().datetime().optional(),
 });
@@ -41,7 +45,10 @@ const toDate = (value?: string) => (value ? new Date(value) : undefined);
 const formatLicense = (license: {
   id: string;
   rankId: string;
+  poolId: string | null;
   status: string;
+  maxUses: number | null;
+  useCount: number;
   expiresAt: Date | null;
   redeemedAt: Date | null;
   redeemedById: string | null;
@@ -50,7 +57,10 @@ const formatLicense = (license: {
 }) => ({
   id: license.id,
   rank_id: license.rankId,
+  pool_id: license.poolId,
   status: license.status,
+  max_uses: license.maxUses,
+  use_count: license.useCount,
   expires_at: license.expiresAt,
   redeemed_at: license.redeemedAt,
   redeemed_by_id: license.redeemedById,
@@ -81,10 +91,17 @@ export const registerLicenseRoutes = async (
       const { appId } = request.params as { appId: string };
       await ensureDeveloperApp(appId, request.developerUser.id);
 
-      const { rank_id: rankId, expires_at: expiresAt } = parsed.data;
+      const {
+        rank_id: rankId,
+        pool_id: poolId,
+        max_uses: maxUses,
+        expires_at: expiresAt,
+      } = parsed.data;
       const { license, plaintextKey } = await LicenseService.createLicense(
         appId,
         rankId,
+        poolId,
+        maxUses,
         toDate(expiresAt),
       );
 
@@ -113,12 +130,20 @@ export const registerLicenseRoutes = async (
       const { appId } = request.params as { appId: string };
       await ensureDeveloperApp(appId, request.developerUser.id);
 
-      const { rank_id: rankId, count, expires_at: expiresAt } = parsed.data;
+      const {
+        rank_id: rankId,
+        pool_id: poolId,
+        max_uses: maxUses,
+        count,
+        expires_at: expiresAt,
+      } = parsed.data;
       const { licenses, plaintextKeys } =
         await LicenseService.createLicensesBulk(
           appId,
           rankId,
           count,
+          poolId,
+          maxUses,
           toDate(expiresAt),
         );
 

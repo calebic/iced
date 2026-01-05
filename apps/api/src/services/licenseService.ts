@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { License, LicenseStatus, Prisma } from "@prisma/client";
+import { Prisma, type License, type LicenseStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { hashToken } from "../utils/crypto";
 import { writeAuditLog } from "../audit";
@@ -49,9 +49,22 @@ const ensureRank = async (appId: string, rankId: string) => {
   }
 };
 
+const ensurePool = async (appId: string, poolId: string) => {
+  const pool = await prisma.licensePool.findFirst({
+    where: { id: poolId, applicationId: appId },
+    select: { id: true },
+  });
+
+  if (!pool) {
+    throw new Error("License pool not found for application.");
+  }
+};
+
 const createLicenseRecord = async (data: {
   applicationId: string;
   rankId: string;
+  poolId?: string | null;
+  maxUses?: number | null;
   expiresAt?: Date | null;
 }): Promise<{ license: License; plaintextKey: string }> => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -62,7 +75,9 @@ const createLicenseRecord = async (data: {
         data: {
           applicationId: data.applicationId,
           rankId: data.rankId,
+          poolId: data.poolId ?? null,
           codeHash,
+          maxUses: data.maxUses ?? null,
           expiresAt: data.expiresAt ?? null,
         },
       });
@@ -98,14 +113,24 @@ export const LicenseService = {
   async createLicense(
     appId: string,
     rankId: string,
+    poolId?: string,
+    maxUses?: number,
     expiresAt?: Date,
   ): Promise<{ license: License; plaintextKey: string }> {
     const application = await ensureApplication(appId);
     await ensureRank(appId, rankId);
+    if (poolId) {
+      await ensurePool(appId, poolId);
+    }
+    if (maxUses !== undefined && maxUses <= 0) {
+      throw new Error("maxUses must be greater than zero.");
+    }
 
     const { license, plaintextKey } = await createLicenseRecord({
       applicationId: appId,
       rankId,
+      poolId,
+      maxUses,
       expiresAt,
     });
 
@@ -124,6 +149,8 @@ export const LicenseService = {
     appId: string,
     rankId: string,
     count: number,
+    poolId?: string,
+    maxUses?: number,
     expiresAt?: Date,
   ): Promise<{ licenses: License[]; plaintextKeys: string[] }> {
     if (count <= 0) {
@@ -132,6 +159,12 @@ export const LicenseService = {
 
     const application = await ensureApplication(appId);
     await ensureRank(appId, rankId);
+    if (poolId) {
+      await ensurePool(appId, poolId);
+    }
+    if (maxUses !== undefined && maxUses <= 0) {
+      throw new Error("maxUses must be greater than zero.");
+    }
 
     const licenses: License[] = [];
     const plaintextKeys: string[] = [];
@@ -140,6 +173,8 @@ export const LicenseService = {
       const { license, plaintextKey } = await createLicenseRecord({
         applicationId: appId,
         rankId,
+        poolId,
+        maxUses,
         expiresAt,
       });
       licenses.push(license);
@@ -246,31 +281,30 @@ export const LicenseService = {
     const now = new Date();
 
     const license = await prisma.$transaction(async (tx) => {
-      const redeemResult = await tx.license.updateMany({
-        where: {
-          applicationId: appId,
-          codeHash,
-          status: "active",
-          redeemedById: null,
-          revokedAt: null,
-          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-        },
-        data: {
-          status: "redeemed",
-          redeemedAt: now,
-          redeemedById: endUserId,
-        },
-      });
+      const [redeemed] = await tx.$queryRaw<License[]>(
+        Prisma.sql`
+          UPDATE "licenses"
+          SET
+            "use_count" = "use_count" + 1,
+            "redeemed_at" = ${now},
+            "redeemed_by_id" = ${endUserId},
+            "status" = CASE
+              WHEN "max_uses" IS NOT NULL AND "use_count" + 1 >= "max_uses"
+                THEN 'redeemed'
+              ELSE "status"
+            END
+          WHERE
+            "application_id" = ${appId}
+            AND "code_hash" = ${codeHash}
+            AND "status" = 'active'
+            AND "revoked_at" IS NULL
+            AND ("expires_at" IS NULL OR "expires_at" > ${now})
+            AND ("max_uses" IS NULL OR "use_count" < "max_uses")
+          RETURNING *;
+        `,
+      );
 
-      if (redeemResult.count === 1) {
-        const redeemed = await tx.license.findFirst({
-          where: { applicationId: appId, codeHash },
-        });
-
-        if (!redeemed) {
-          throw new Error("Redeemed license not found.");
-        }
-
+      if (redeemed) {
         return redeemed;
       }
 
@@ -294,6 +328,16 @@ export const LicenseService = {
 
       if (existing.status === "revoked") {
         throw new Error("License revoked.");
+      }
+
+      if (existing.maxUses && existing.useCount >= existing.maxUses) {
+        if (existing.status === "active") {
+          await tx.license.update({
+            where: { id: existing.id },
+            data: { status: "redeemed" },
+          });
+        }
+        throw new Error("License usage exhausted.");
       }
 
       if (existing.status === "redeemed") {

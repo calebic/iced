@@ -113,12 +113,28 @@ model Application {
   ranks                      Rank[]
   permissions                Permission[]
   licenses                   License[]
+  licensePools               LicensePool[]
   auditLogs                  AuditLog[]
   defaultRank                Rank?              @relation("DefaultRank", fields: [defaultRankId], references: [id], onDelete: SetNull)
 
   @@index([developerUserId])
   @@index([status])
   @@map("applications")
+}
+
+model LicensePool {
+  id            String       @id @default(uuid()) @db.Uuid
+  applicationId String       @map("application_id") @db.Uuid
+  name          String
+  description   String?
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  licenses      License[]
+
+  @@unique([applicationId, name])
+  @@index([applicationId])
+  @@map("license_pools")
 }
 
 model ApiKey {
@@ -224,8 +240,11 @@ model License {
   id            String        @id @default(uuid()) @db.Uuid
   applicationId String        @map("application_id") @db.Uuid
   rankId        String        @map("rank_id") @db.Uuid
+  poolId        String?       @map("pool_id") @db.Uuid
   codeHash      String        @unique @map("code_hash")
   status        LicenseStatus @default(active)
+  maxUses       Int?          @map("max_uses")
+  useCount      Int           @default(0) @map("use_count")
   expiresAt     DateTime?     @map("expires_at")
   redeemedAt    DateTime?     @map("redeemed_at")
   redeemedById  String?       @map("redeemed_by_id") @db.Uuid
@@ -235,9 +254,11 @@ model License {
 
   application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   rank          Rank          @relation(fields: [rankId], references: [id], onDelete: Restrict)
+  pool          LicensePool?  @relation(fields: [poolId], references: [id], onDelete: SetNull)
   redeemedBy    EndUser?      @relation("LicenseRedeemer", fields: [redeemedById], references: [id], onDelete: SetNull)
 
   @@index([applicationId])
+  @@index([poolId])
   @@index([status])
   @@map("licenses")
 }
