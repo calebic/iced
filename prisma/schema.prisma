@@ -17,6 +17,11 @@ enum ApplicationStatus {
   disabled
 }
 
+enum EndUserStatus {
+  active
+  disabled
+}
+
 enum LicenseStatus {
   active
   redeemed
@@ -157,6 +162,7 @@ model EndUser {
   rankId       String?               @map("rank_id") @db.Uuid
   email        String
   passwordHash String                @map("password_hash")
+  status       EndUserStatus         @default(active)
   createdAt    DateTime              @default(now()) @map("created_at")
   updatedAt    DateTime              @updatedAt @map("updated_at")
   lastLoginAt  DateTime?             @map("last_login_at")
@@ -168,6 +174,7 @@ model EndUser {
 
   @@unique([applicationId, email])
   @@index([applicationId])
+  @@index([status])
   @@index([rankId])
   @@map("end_users")
 }
