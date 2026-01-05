@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { errorResponse, successResponse } from "@iced/shared";
 import { env } from "../env";
@@ -11,11 +11,15 @@ import {
 } from "../utils/crypto";
 
 const RegisterSchema = z.object({
+  username: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
 });
 
-const LoginSchema = RegisterSchema;
+const LoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
 
 const cookieBase = {
   httpOnly: true,
@@ -29,7 +33,10 @@ const sessionDurationMs = 1000 * 60 * 60 * 24 * 7;
 export const registerDashboardRoutes = async (
   app: FastifyInstance,
 ): Promise<void> => {
-  app.post("/register", async (request, reply) => {
+  const handleRegister = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
     const parsed = RegisterSchema.safeParse(request.body);
     if (!parsed.success) {
       reply
@@ -38,12 +45,40 @@ export const registerDashboardRoutes = async (
       return;
     }
 
-    const { email, password } = parsed.data;
+    const { username, email, password } = parsed.data;
+    const normalizedUsername = username.trim().toLowerCase();
+    if (!normalizedUsername) {
+      reply
+        .code(400)
+        .send(errorResponse("invalid_request", "Username is required."));
+      return;
+    }
 
     try {
+      const existingDeveloper = await prisma.developerUser.findFirst({
+        where: {
+          OR: [{ email }, { usernameNormalized: normalizedUsername }],
+        },
+        select: {
+          email: true,
+          usernameNormalized: true,
+        },
+      });
+
+      if (existingDeveloper) {
+        const message =
+          existingDeveloper.usernameNormalized === normalizedUsername
+            ? "Username already registered."
+            : "Email already registered.";
+        reply.code(409).send(errorResponse("conflict", message));
+        return;
+      }
+
       const developer = await prisma.developerUser.create({
         data: {
           email,
+          username,
+          usernameNormalized: normalizedUsername,
           passwordHash: hashPassword(password),
           status: "active",
         },
@@ -66,9 +101,15 @@ export const registerDashboardRoutes = async (
         .code(409)
         .send(errorResponse("conflict", "Email already registered."));
     }
-  });
+  };
 
-  app.post("/login", async (request, reply) => {
+  app.post("/register", handleRegister);
+  app.post("/auth/register", handleRegister);
+
+  const handleLogin = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
     const parsed = LoginSchema.safeParse(request.body);
     if (!parsed.success) {
       reply
@@ -109,7 +150,10 @@ export const registerDashboardRoutes = async (
 
     reply.setCookie(env.DEVELOPER_SESSION_COOKIE, rawToken, cookieBase);
     reply.send(successResponse({}));
-  });
+  };
+
+  app.post("/login", handleLogin);
+  app.post("/auth/login", handleLogin);
 
   app.post(
     "/logout",
