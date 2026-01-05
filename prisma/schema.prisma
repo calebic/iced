@@ -69,13 +69,15 @@ model OwnerSession {
 }
 
 model DeveloperUser {
-  id           String            @id @default(uuid()) @db.Uuid
-  email        String            @unique
-  passwordHash String            @map("password_hash")
-  status       DeveloperStatus   @default(active)
-  disabledAt   DateTime?         @map("disabled_at")
-  createdAt    DateTime          @default(now()) @map("created_at")
-  updatedAt    DateTime          @updatedAt @map("updated_at")
+  id                 String            @id @default(uuid()) @db.Uuid
+  username           String            @map("username")
+  usernameNormalized String            @unique @map("username_normalized")
+  email              String            @unique
+  passwordHash       String            @map("password_hash")
+  status             DeveloperStatus   @default(active)
+  disabledAt         DateTime?         @map("disabled_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
 
   sessions     DeveloperSession[]
   applications Application[]
