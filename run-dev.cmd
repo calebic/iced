@@ -4,8 +4,14 @@ setlocal
 rem Start all Iced services on Windows.
 cd /d %~dp0
 
-start "Iced API" cmd /k "cd /d %~dp0apps\api && npm install && npm run dev"
-start "Iced Dashboard" cmd /k "cd /d %~dp0apps\dashboard && npm install && npm run dev"
-start "Iced Owner" cmd /k "cd /d %~dp0apps\owner && npm install && npm run dev"
+echo ==========================================
+echo   Iced Dev Launcher
+echo ==========================================
+echo Using pnpm for workspace installs.
+echo.
+
+start "Iced API" cmd /k "color 0B && cd /d %~dp0 && pnpm install && pnpm -C apps\api dev"
+start "Iced Dashboard" cmd /k "color 0A && cd /d %~dp0 && pnpm install && pnpm -C apps\dashboard dev"
+start "Iced Owner" cmd /k "color 0D && cd /d %~dp0 && pnpm install && pnpm -C apps\owner dev"
 
 endlocal
