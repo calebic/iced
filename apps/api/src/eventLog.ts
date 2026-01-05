@@ -1,5 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import { prisma } from "./prisma";
+import { WebhookService } from "./services/webhookService";
 
 type EventMetadata = Record<string, unknown>;
 
@@ -13,7 +14,7 @@ export const writeEventLog = async (params: {
 }): Promise<void> => {
   const { appId, eventType, request, statusCode, apiKeyId, metadata } = params;
 
-  await prisma.eventLog.create({
+  const event = await prisma.eventLog.create({
     data: {
       appId,
       eventType,
@@ -27,4 +28,10 @@ export const writeEventLog = async (params: {
       metadata: metadata ?? {},
     },
   });
+
+  try {
+    await WebhookService.enqueueDeliveriesForEvent(event);
+  } catch (error) {
+    request.log.error(error, "Failed to enqueue webhook deliveries.");
+  }
 };

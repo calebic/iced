@@ -11,6 +11,7 @@ import { registerApplicationRoutes } from "./routes/applications";
 import { registerRankPermissionRoutes } from "./routes/ranks";
 import { registerLicenseRoutes } from "./routes/licenses";
 import { registerEventRoutes } from "./routes/events";
+import { registerWebhookRoutes } from "./routes/webhooks";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -52,6 +53,7 @@ export const buildServer = () => {
   app.register(registerRankPermissionRoutes, { prefix: "/dashboard" });
   app.register(registerLicenseRoutes, { prefix: "/dashboard" });
   app.register(registerEventRoutes, { prefix: "/dashboard" });
+  app.register(registerWebhookRoutes, { prefix: "/dashboard" });
   app.register(registerV1Routes);
 
   app.get("/health", async () => ({ status: "ok" }));

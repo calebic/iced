@@ -30,6 +30,12 @@ enum ActorType {
   end_user
 }
 
+enum WebhookDeliveryStatus {
+  pending
+  sent
+  failed
+}
+
 model OwnerUser {
   id           String         @id @default(uuid()) @db.Uuid
   email        String         @unique
@@ -274,4 +280,44 @@ model EventLog {
   @@index([eventType])
   @@index([createdAt])
   @@map("event_logs")
+}
+
+model Webhook {
+  id            String   @id @default(uuid()) @db.Uuid
+  appId         String   @map("app_id") @db.Uuid
+  url           String
+  secretCipher  String   @map("secret_cipher")
+  enabled       Boolean  @default(true)
+  events        String[]
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  application   Application       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  deliveries    WebhookDelivery[]
+
+  @@index([appId])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id             String                @id @default(uuid()) @db.Uuid
+  webhookId      String                @map("webhook_id") @db.Uuid
+  appId          String                @map("app_id") @db.Uuid
+  eventType      String                @map("event_type")
+  payloadJson    Json                  @map("payload_json")
+  status         WebhookDeliveryStatus @default(pending)
+  attemptCount   Int                   @default(0) @map("attempt_count")
+  nextAttemptAt  DateTime              @map("next_attempt_at")
+  lastError      String?               @map("last_error")
+  lastStatusCode Int?                  @map("last_status_code")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  webhook        Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  application    Application           @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@index([appId])
+  @@index([webhookId])
+  @@index([status])
+  @@index([nextAttemptAt])
+  @@map("webhook_deliveries")
 }
