@@ -6,6 +6,7 @@ import { requireTenant } from "../middleware/tenantResolver";
 import { hashPassword, hashToken, generateSessionToken } from "../utils/crypto";
 import { signAccessToken, verifyAccessToken } from "../utils/jwt";
 import { writeAuditLog } from "../audit";
+import { writeEventLog } from "../eventLog";
 
 const RegisterSchema = z.object({
   email: z.string().email(),
@@ -163,6 +164,15 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
                 redeemedById: endUser.id,
               },
             });
+
+            await writeEventLog({
+              appId: appTenant.id,
+              eventType: "license.redeemed",
+              request,
+              statusCode: reply.statusCode,
+              apiKeyId: request.tenantApiKeyId,
+              metadata: { licenseId: license?.id, endUserId: endUser.id },
+            });
           }
 
           const tokens = await issueTokens({
@@ -178,6 +188,15 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
             actorId: endUser.id,
             action: "auth.register",
             appId: appTenant.id,
+          });
+
+          await writeEventLog({
+            appId: appTenant.id,
+            eventType: "end_user.registered",
+            request,
+            statusCode: reply.statusCode,
+            apiKeyId: request.tenantApiKeyId,
+            metadata: { endUserId: endUser.id },
           });
 
           reply.send(successResponse(tokens));
@@ -245,6 +264,15 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           actorId: endUser.id,
           action: "auth.login",
           appId: appTenant.id,
+        });
+
+        await writeEventLog({
+          appId: appTenant.id,
+          eventType: "end_user.logged_in",
+          request,
+          statusCode: reply.statusCode,
+          apiKeyId: request.tenantApiKeyId,
+          metadata: { endUserId: endUser.id },
         });
 
         reply.send(successResponse(tokens));

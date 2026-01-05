@@ -252,3 +252,26 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model EventLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  appId      String   @map("app_id") @db.Uuid
+  eventType  String   @map("event_type")
+  requestId  String   @map("request_id")
+  ip         String   @map("ip")
+  userAgent  String   @map("user_agent")
+  method     String   @map("method")
+  path       String   @map("path")
+  statusCode Int      @map("status_code")
+  apiKeyId   String?  @map("api_key_id") @db.Uuid
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  application Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  apiKey      ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([appId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("event_logs")
+}

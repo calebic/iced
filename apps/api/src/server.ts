@@ -10,12 +10,14 @@ import { registerV1Routes } from "./routes/v1";
 import { registerApplicationRoutes } from "./routes/applications";
 import { registerRankPermissionRoutes } from "./routes/ranks";
 import { registerLicenseRoutes } from "./routes/licenses";
+import { registerEventRoutes } from "./routes/events";
 
 declare module "fastify" {
   interface FastifyRequest {
     ownerUser?: import("./types").AuthenticatedOwner;
     developerUser?: import("./types").AuthenticatedDeveloper;
     tenantApplication?: import("./types").TenantApplication;
+    tenantApiKeyId?: string;
   }
 }
 
@@ -49,6 +51,7 @@ export const buildServer = () => {
   app.register(registerApplicationRoutes, { prefix: "/dashboard" });
   app.register(registerRankPermissionRoutes, { prefix: "/dashboard" });
   app.register(registerLicenseRoutes, { prefix: "/dashboard" });
+  app.register(registerEventRoutes, { prefix: "/dashboard" });
   app.register(registerV1Routes);
 
   app.get("/health", async () => ({ status: "ok" }));

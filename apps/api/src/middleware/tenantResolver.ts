@@ -3,6 +3,7 @@ import { errorResponse } from "@iced/shared";
 import { env } from "../env";
 import { prisma } from "../prisma";
 import { hashToken } from "../utils/crypto";
+import { writeEventLog } from "../eventLog";
 
 export const requireTenant = async (
   request: FastifyRequest,
@@ -42,4 +43,13 @@ export const requireTenant = async (
   }
 
   request.tenantApplication = apiKey.application;
+  request.tenantApiKeyId = apiKey.id;
+
+  await writeEventLog({
+    appId: apiKey.applicationId,
+    eventType: "api_key.used",
+    request,
+    statusCode: reply.statusCode,
+    apiKeyId: apiKey.id,
+  });
 };
