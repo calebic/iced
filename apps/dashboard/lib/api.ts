@@ -3,12 +3,6 @@ const resolveFallbackBaseUrl = (): string => {
     return "http://localhost:3000";
   }
 
-  const { hostname, protocol, port } = window.location;
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    const fallbackPort = port === "3000" ? "3001" : "3000";
-    return `${protocol}//${hostname}:${fallbackPort}`;
-  }
-
   return window.location.origin;
 };
 
