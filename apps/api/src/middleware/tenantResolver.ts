@@ -1,0 +1,45 @@
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { errorResponse } from "@iced/shared";
+import { env } from "../env";
+import { prisma } from "../prisma";
+import { hashToken } from "../utils/crypto";
+
+export const requireTenant = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> => {
+  const apiKeyHeader = env.API_KEY_HEADER.toLowerCase();
+  const rawKey =
+    request.headers[apiKeyHeader] ??
+    request.headers[apiKeyHeader.toUpperCase()];
+
+  if (!rawKey || Array.isArray(rawKey)) {
+    reply.code(401).send(errorResponse("unauthorized", "API key required."));
+    return;
+  }
+
+  const keyHash = hashToken(rawKey);
+  const apiKey = await prisma.apiKey.findFirst({
+    where: {
+      keyHash,
+      revokedAt: null,
+    },
+    include: {
+      application: true,
+    },
+  });
+
+  if (!apiKey) {
+    reply.code(401).send(errorResponse("unauthorized", "Invalid API key."));
+    return;
+  }
+
+  if (apiKey.application.status !== "active") {
+    reply
+      .code(403)
+      .send(errorResponse("forbidden", "Application is disabled."));
+    return;
+  }
+
+  request.tenantApplication = apiKey.application;
+};
