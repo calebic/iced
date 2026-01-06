@@ -176,7 +176,7 @@ const AuthPage = ({ initialTab = "login" }: AuthPageProps) => {
   if (isCheckingSession) {
     return (
       <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-md items-center justify-center">
-        <p className="text-sm text-slate-300">Checking your session…</p>
+        <p className="text-sm text-[var(--theme-muted)]">Checking your session…</p>
       </div>
     );
   }
@@ -189,15 +189,15 @@ const AuthPage = ({ initialTab = "login" }: AuthPageProps) => {
             <CardTitle>Welcome to Iced</CardTitle>
             <CardDescription>Sign in or create a dashboard account to continue.</CardDescription>
           </div>
-          <div className="grid grid-cols-2 rounded-lg bg-slate-900 p-1">
+          <div className="grid grid-cols-2 rounded-lg bg-[var(--theme-toggle-bg)] p-1">
             <button
               type="button"
               onClick={() => setTab("login")}
               className={cn(
                 "h-10 rounded-md text-sm font-semibold transition",
                 tab === "login"
-                  ? "bg-white text-slate-900"
-                  : "text-slate-300 hover:text-white",
+                  ? "bg-[var(--theme-toggle-active-bg)] text-[var(--theme-toggle-text)]"
+                  : "text-[var(--theme-toggle-muted)] hover:text-[var(--theme-fg)]",
               )}
             >
               Login
@@ -208,8 +208,8 @@ const AuthPage = ({ initialTab = "login" }: AuthPageProps) => {
               className={cn(
                 "h-10 rounded-md text-sm font-semibold transition",
                 tab === "register"
-                  ? "bg-white text-slate-900"
-                  : "text-slate-300 hover:text-white",
+                  ? "bg-[var(--theme-toggle-active-bg)] text-[var(--theme-toggle-text)]"
+                  : "text-[var(--theme-toggle-muted)] hover:text-[var(--theme-fg)]",
               )}
             >
               Register

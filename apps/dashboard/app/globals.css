@@ -4,8 +4,57 @@
 
 :root {
   color-scheme: light;
+  --theme-bg: #f8fafc;
+  --theme-fg: #0f172a;
+  --theme-muted: #475569;
+  --theme-muted-strong: #64748b;
+  --theme-border: #e2e8f0;
+  --theme-card-bg: #ffffff;
+  --theme-card-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+  --theme-panel-bg: #f1f5f9;
+  --theme-input-bg: #ffffff;
+  --theme-input-text: #0f172a;
+  --theme-input-border: #cbd5e1;
+  --theme-input-border-focus: #94a3b8;
+  --theme-input-placeholder: #94a3b8;
+  --theme-ring: #94a3b8;
+  --theme-button-bg: #0f172a;
+  --theme-button-text: #f8fafc;
+  --theme-toggle-bg: #e2e8f0;
+  --theme-toggle-active-bg: #ffffff;
+  --theme-toggle-text: #0f172a;
+  --theme-toggle-muted: #475569;
+}
+
+html.dark {
+  color-scheme: dark;
+  --theme-bg: #020617;
+  --theme-fg: #f8fafc;
+  --theme-muted: #cbd5f5;
+  --theme-muted-strong: #94a3b8;
+  --theme-border: #1e293b;
+  --theme-card-bg: rgba(15, 23, 42, 0.4);
+  --theme-card-shadow: 0 20px 40px rgba(2, 6, 23, 0.4);
+  --theme-panel-bg: rgba(2, 6, 23, 0.4);
+  --theme-input-bg: #0f172a;
+  --theme-input-text: #f8fafc;
+  --theme-input-border: #1e293b;
+  --theme-input-border-focus: #475569;
+  --theme-input-placeholder: #64748b;
+  --theme-ring: #475569;
+  --theme-button-bg: #f8fafc;
+  --theme-button-text: #0f172a;
+  --theme-toggle-bg: #0f172a;
+  --theme-toggle-active-bg: #f8fafc;
+  --theme-toggle-text: #0f172a;
+  --theme-toggle-muted: #94a3b8;
+}
+
+html.light {
+  color-scheme: light;
 }
 
 body {
-  @apply bg-slate-950 text-slate-100;
+  background-color: var(--theme-bg);
+  color: var(--theme-fg);
 }

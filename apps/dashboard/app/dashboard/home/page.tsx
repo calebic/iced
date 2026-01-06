@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import ThemeToggle from "@/components/theme-toggle";
 
 const formatDate = (value: string | Date) =>
   new Date(value).toLocaleString(undefined, {
@@ -385,12 +386,18 @@ const HomePage = () => {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Dashboard Home</h1>
-          <p className="text-slate-300">
+          <p className="text-[var(--theme-muted)]">
             Manage your applications and developer access from one place.
           </p>
         </div>
-        <div className="w-full max-w-xs">
-          <Button type="button" onClick={handleLogout} disabled={isLoggingOut}>
+        <div className="flex w-full max-w-xs items-center justify-end gap-3">
+          <ThemeToggle />
+          <Button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-auto px-4"
+          >
             {isLoggingOut ? "Signing out…" : "Sign out"}
           </Button>
         </div>
@@ -432,9 +439,11 @@ const HomePage = () => {
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Your applications</h2>
         {isLoading ? (
-          <p className="text-sm text-slate-400">Loading applications…</p>
+          <p className="text-sm text-[var(--theme-muted-strong)]">
+            Loading applications…
+          </p>
         ) : apps.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[var(--theme-muted-strong)]">
             No applications yet. Create one to get started.
           </p>
         ) : (
@@ -459,13 +468,13 @@ const HomePage = () => {
                         <CardTitle>{app.name}</CardTitle>
                         <CardDescription>Status: {app.status}</CardDescription>
                       </div>
-                      <span className="text-sm text-slate-400">
+                      <span className="text-sm text-[var(--theme-muted-strong)]">
                         {isExpanded ? "Hide" : "View"} details
                       </span>
                     </CardHeader>
                   </button>
                   <CardContent>
-                    <p className="text-sm text-slate-300">
+                    <p className="text-sm text-[var(--theme-muted)]">
                       Created {formatDate(app.created_at)}
                     </p>
                     <div
@@ -475,12 +484,12 @@ const HomePage = () => {
                           : "max-h-0 opacity-0"
                       }`}
                     >
-                      <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-                        <h3 className="text-sm font-semibold text-slate-100">
+                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
                           Users
                         </h3>
                         {!usersState || usersState.isLoading ? (
-                          <p className="mt-2 text-sm text-slate-400">
+                          <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
                             Loading users…
                           </p>
                         ) : usersState.error ? (
@@ -488,13 +497,13 @@ const HomePage = () => {
                             {usersState.error}
                           </p>
                         ) : usersState.items.length === 0 ? (
-                          <p className="mt-2 text-sm text-slate-400">
+                          <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
                             {usersState.emptyMessage}
                           </p>
                         ) : (
                           <div className="mt-3 overflow-x-auto">
-                            <table className="w-full text-left text-sm text-slate-200">
-                              <thead className="text-xs uppercase text-slate-500">
+                            <table className="w-full text-left text-sm text-[var(--theme-fg)]">
+                              <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
                                 <tr>
                                   <th className="py-2">Username</th>
                                   <th className="py-2">Email</th>
@@ -505,14 +514,14 @@ const HomePage = () => {
                                   <th className="py-2 text-right">Actions</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-800">
+                              <tbody className="divide-y divide-[var(--theme-border)]">
                                 {usersState.items.map((user) => (
                                   <tr key={user.id} className="align-top">
                                     <td className="py-3">{user.username}</td>
                                     <td className="py-3">{user.email ?? "—"}</td>
                                     <td className="py-3">
                                       <select
-                                        className="h-9 rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
+                                        className="h-9 rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
                                         value={user.rank_id ?? ""}
                                         onChange={(event) =>
                                           updateUser(app.id, user.id, {
@@ -564,11 +573,11 @@ const HomePage = () => {
                           </div>
                         )}
                       </div>
-                      <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-                        <h3 className="text-sm font-semibold text-slate-100">
+                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
                           Registration requirements
                         </h3>
-                        <p className="mt-1 text-sm text-slate-400">
+                        <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
                           Configure which fields are required when end users
                           register through the public API.
                         </p>
@@ -579,7 +588,7 @@ const HomePage = () => {
                             </Label>
                             <select
                               id={`email-policy-${app.id}`}
-                              className="h-9 w-full rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
+                              className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
                               value={app.email_policy}
                               onChange={(event) =>
                                 updateRegistrationPolicies(app.id, {
@@ -592,7 +601,7 @@ const HomePage = () => {
                               <option value="optional">Optional</option>
                               <option value="disabled">Disabled</option>
                             </select>
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-[var(--theme-muted-strong)]">
                               Required forces end users to provide email.
                               Disabled rejects email on registration.
                             </p>
@@ -603,7 +612,7 @@ const HomePage = () => {
                             </Label>
                             <select
                               id={`license-policy-${app.id}`}
-                              className="h-9 w-full rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
+                              className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
                               value={app.license_policy}
                               onChange={(event) =>
                                 updateRegistrationPolicies(app.id, {
@@ -616,7 +625,7 @@ const HomePage = () => {
                               <option value="optional">Optional</option>
                               <option value="disabled">Disabled</option>
                             </select>
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-[var(--theme-muted-strong)]">
                               Required forces a license code during registration.
                               Disabled rejects license codes on sign up.
                             </p>
