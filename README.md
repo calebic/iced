@@ -25,6 +25,38 @@ building the entire system from scratch.
 3. Start the Dashboard (`apps/dashboard`) and Owner Panel (`apps/owner`) apps for
    their UIs.
 
+### Development ports
+
+Iced uses fixed development ports and will fail fast if any are already in use:
+
+- Dashboard: http://127.0.0.1:3001
+- API: http://127.0.0.1:3002
+- Owner Panel: http://127.0.0.1:3003
+
+### Dashboard API URL
+
+The dashboard proxies API calls using `NEXT_PUBLIC_API_URL`.
+
+- Default (dev): `http://127.0.0.1:3002`
+- Example override: `NEXT_PUBLIC_API_URL=https://api.example.com`
+
+`NEXT_PUBLIC_API_URL` must include a protocol and must not point to the dashboard
+origin/port.
+
+### Running all services
+
+Use the dev launcher to start everything with the correct ports:
+
+```powershell
+./run-dev.cmd
+```
+
+### Troubleshooting
+
+- **Port already in use**: stop the process holding the port (3001-3003) and rerun.
+- **Dashboard can't register/login**: confirm the API is running on 3002 and
+  `NEXT_PUBLIC_API_URL` is set correctly.
+
 ## Create an application
 
 1. Sign in to the **Dashboard**.

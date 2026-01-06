@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ../../scripts/ensure-port.mjs 3003 Owner && next dev -p 3003",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

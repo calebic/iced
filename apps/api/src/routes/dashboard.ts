@@ -94,12 +94,12 @@ export const registerDashboardRoutes = async (
       });
 
       reply.setCookie(env.DEVELOPER_SESSION_COOKIE, rawToken, cookieBase);
-      reply.send(successResponse({}));
+      reply.code(201).send(successResponse({}));
     } catch (error) {
       request.log.error(error);
       reply
-        .code(409)
-        .send(errorResponse("conflict", "Email already registered."));
+        .code(500)
+        .send(errorResponse("server_error", "Unable to register right now."));
     }
   };
 
@@ -118,38 +118,45 @@ export const registerDashboardRoutes = async (
       return;
     }
 
-    const { email, password } = parsed.data;
-    const developer = await prisma.developerUser.findUnique({
-      where: {
-        email,
-      },
-    });
+    try {
+      const { email, password } = parsed.data;
+      const developer = await prisma.developerUser.findUnique({
+        where: {
+          email,
+        },
+      });
 
-    if (!developer || developer.passwordHash !== hashPassword(password)) {
+      if (!developer || developer.passwordHash !== hashPassword(password)) {
+        reply
+          .code(401)
+          .send(errorResponse("unauthorized", "Invalid credentials."));
+        return;
+      }
+
+      if (developer.status !== "active") {
+        reply
+          .code(403)
+          .send(errorResponse("forbidden", "Developer account disabled."));
+        return;
+      }
+
+      const rawToken = generateSessionToken();
+      await prisma.developerSession.create({
+        data: {
+          developerUserId: developer.id,
+          sessionTokenHash: hashToken(rawToken),
+          expiresAt: new Date(Date.now() + sessionDurationMs),
+        },
+      });
+
+      reply.setCookie(env.DEVELOPER_SESSION_COOKIE, rawToken, cookieBase);
+      reply.send(successResponse({}));
+    } catch (error) {
+      request.log.error(error);
       reply
-        .code(401)
-        .send(errorResponse("unauthorized", "Invalid credentials."));
-      return;
+        .code(500)
+        .send(errorResponse("server_error", "Unable to sign in right now."));
     }
-
-    if (developer.status !== "active") {
-      reply
-        .code(403)
-        .send(errorResponse("forbidden", "Developer account disabled."));
-      return;
-    }
-
-    const rawToken = generateSessionToken();
-    await prisma.developerSession.create({
-      data: {
-        developerUserId: developer.id,
-        sessionTokenHash: hashToken(rawToken),
-        expiresAt: new Date(Date.now() + sessionDurationMs),
-      },
-    });
-
-    reply.setCookie(env.DEVELOPER_SESSION_COOKIE, rawToken, cookieBase);
-    reply.send(successResponse({}));
   };
 
   app.post("/login", handleLogin);

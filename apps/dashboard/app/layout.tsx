@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { getValidatedApiBaseUrl } from "@/lib/api-config";
+import { checkApiHealth } from "@/lib/api-health";
 import "./globals.css";
 
 export const metadata = {
@@ -6,12 +8,15 @@ export const metadata = {
   description: "Iced dashboard UI skeleton.",
 };
 
-const RootLayout = ({ children }: { children: ReactNode }) => (
-  <html lang="en">
-    <body className="min-h-screen">
-      {children}
-    </body>
-  </html>
-);
+const RootLayout = async ({ children }: { children: ReactNode }) => {
+  getValidatedApiBaseUrl();
+  await checkApiHealth();
+
+  return (
+    <html lang="en">
+      <body className="min-h-screen">{children}</body>
+    </html>
+  );
+};
 
 export default RootLayout;

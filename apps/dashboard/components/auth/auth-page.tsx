@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getApiErrorMessage } from "@/lib/api-errors";
 import { cn } from "@/lib/utils";
 
 type AuthTab = "login" | "register";
@@ -110,13 +111,19 @@ const AuthPage = ({ initialTab = "login" }: AuthPageProps) => {
       });
 
       if (!response.ok) {
-        setLoginError("Login failed. Please check your credentials and try again.");
+        const message = await getApiErrorMessage(
+          response,
+          "Login failed. Please check your credentials and try again.",
+        );
+        setLoginError(message);
         return;
       }
 
       router.push("/dashboard/home");
     } catch {
-      setLoginError("Unable to sign in right now. Please try again.");
+      setLoginError(
+        "API not reachable. Please confirm the API is running and try again.",
+      );
     } finally {
       setIsLoggingIn(false);
     }
@@ -148,13 +155,19 @@ const AuthPage = ({ initialTab = "login" }: AuthPageProps) => {
       });
 
       if (!response.ok) {
-        setRegisterError("Registration failed. Please review your details and try again.");
+        const message = await getApiErrorMessage(
+          response,
+          "Registration failed. Please review your details and try again.",
+        );
+        setRegisterError(message);
         return;
       }
 
       router.push("/dashboard/home");
     } catch {
-      setRegisterError("Unable to create your account right now. Please try again.");
+      setRegisterError(
+        "API not reachable. Please confirm the API is running and try again.",
+      );
     } finally {
       setIsRegistering(false);
     }
