@@ -5,6 +5,13 @@ Write-Host "  Iced Dev Launcher (PowerShell)" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
+if (-not $env:RUN_DEV_CMD_WRAPPED) {
+  Start-Process cmd `
+    -ArgumentList "/k", "set RUN_DEV_CMD_WRAPPED=1 && powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`"" `
+    -WindowStyle Normal
+  exit
+}
+
 function Wait-ForExit {
   if ($Host.Name -eq "ConsoleHost") {
     Read-Host "Press Enter to exit"
