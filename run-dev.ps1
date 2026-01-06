@@ -46,3 +46,4 @@ Write-Host ""
 Write-Host "Services launched." -ForegroundColor Green
 Write-Host "Check the opened windows for URLs." -ForegroundColor Green
 Write-Host ""
+pause
