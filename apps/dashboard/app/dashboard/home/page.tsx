@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getDashboardApiUrl } from "@/lib/api";
 
 const formatDate = (value: string | Date) =>
   new Date(value).toLocaleString(undefined, {
@@ -60,11 +59,15 @@ const HomePage = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(getDashboardApiUrl("/dashboard/apps"), {
+      const response = await fetch("/dashboard/apps", {
         credentials: "include",
       });
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          router.replace("/");
+          return;
+        }
         setError("Unable to load applications. Please try again.");
         return;
       }
@@ -110,10 +113,10 @@ const HomePage = () => {
 
       try {
         const [usersResponse, ranksResponse] = await Promise.all([
-          fetch(getDashboardApiUrl(`/dashboard/apps/${expandedAppId}/users`), {
+          fetch(`/dashboard/apps/${expandedAppId}/users`, {
             credentials: "include",
           }),
-          fetch(getDashboardApiUrl(`/dashboard/apps/${expandedAppId}/ranks`), {
+          fetch(`/dashboard/apps/${expandedAppId}/ranks`, {
             credentials: "include",
           }),
         ]);
@@ -193,36 +196,33 @@ const HomePage = () => {
     }));
 
     try {
-      const response = await fetch(
-        getDashboardApiUrl(`/dashboard/apps/${appId}/users/${userId}`),
-        {
+      const response = await fetch(`/dashboard/apps/${appId}/users/${userId}`, {
         method: "PATCH",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(updates),
-      },
-      );
+      });
 
       if (!response.ok) {
-      setUsersByApp((prev) => ({
-        ...prev,
-        [appId]: prev[appId]
-          ? {
-              ...prev[appId],
-              error: "Unable to update the user. Please try again.",
-            }
-          : {
-              items: [],
-              ranks: [],
-              isLoading: false,
-              error: "Unable to update the user. Please try again.",
-              emptyMessage: "",
-            },
-      }));
-      return;
-    }
+        setUsersByApp((prev) => ({
+          ...prev,
+          [appId]: prev[appId]
+            ? {
+                ...prev[appId],
+                error: "Unable to update the user. Please try again.",
+              }
+            : {
+                items: [],
+                ranks: [],
+                isLoading: false,
+                error: "Unable to update the user. Please try again.",
+                emptyMessage: "",
+              },
+        }));
+        return;
+      }
 
       const payload = (await response.json()) as {
         success: boolean;
@@ -230,23 +230,23 @@ const HomePage = () => {
       };
 
       if (!payload.success || !payload.data?.user) {
-      setUsersByApp((prev) => ({
-        ...prev,
-        [appId]: prev[appId]
-          ? {
-              ...prev[appId],
-              error: "Unable to update the user. Please try again.",
-            }
-          : {
-              items: [],
-              ranks: [],
-              isLoading: false,
-              error: "Unable to update the user. Please try again.",
-              emptyMessage: "",
-            },
-      }));
-      return;
-    }
+        setUsersByApp((prev) => ({
+          ...prev,
+          [appId]: prev[appId]
+            ? {
+                ...prev[appId],
+                error: "Unable to update the user. Please try again.",
+              }
+            : {
+                items: [],
+                ranks: [],
+                isLoading: false,
+                error: "Unable to update the user. Please try again.",
+                emptyMessage: "",
+              },
+        }));
+        return;
+      }
 
       setUsersByApp((prev) => ({
         ...prev,
@@ -296,7 +296,7 @@ const HomePage = () => {
     setIsCreating(true);
 
     try {
-      const response = await fetch(getDashboardApiUrl("/dashboard/apps"), {
+      const response = await fetch("/dashboard/apps", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -324,7 +324,7 @@ const HomePage = () => {
     setIsLoggingOut(true);
 
     try {
-      const response = await fetch(getDashboardApiUrl("/dashboard/auth/logout"), {
+      const response = await fetch("/dashboard/auth/logout", {
         method: "POST",
         credentials: "include",
       });
@@ -334,7 +334,7 @@ const HomePage = () => {
         return;
       }
 
-      router.push("/dashboard/login");
+      router.push("/");
     } catch {
       setError("Unable to log out right now. Please try again.");
     } finally {
