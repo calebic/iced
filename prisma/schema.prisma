@@ -122,6 +122,9 @@ model Application {
   licenses                   License[]
   licensePools               LicensePool[]
   auditLogs                  AuditLog[]
+  eventLogs                  EventLog[]
+  webhooks                   Webhook[]
+  webhookDeliveries          WebhookDelivery[]
   defaultRank                Rank?              @relation("DefaultRank", fields: [defaultRankId], references: [id], onDelete: SetNull)
 
   @@index([developerUserId])
@@ -153,6 +156,7 @@ model ApiKey {
   lastUsedAt    DateTime?    @map("last_used_at")
 
   application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventLogs     EventLog[]
 
   @@index([applicationId])
   @@map("api_keys")
@@ -196,6 +200,7 @@ model EndUserRefreshToken {
 
   @@index([endUserId])
   @@index([expiresAt])
+  @@unique([replacedById])
   @@map("end_user_refresh_tokens")
 }
 
@@ -212,6 +217,7 @@ model Rank {
   permissions   RankPermission[]
   licenses      License[]
   defaultFor    Application[] @relation("DefaultRank")
+  endUsers      EndUser[]
 
   @@unique([applicationId, name])
   @@index([applicationId])
