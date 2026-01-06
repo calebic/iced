@@ -698,15 +698,15 @@ const HomePage = () => {
                           </div>
                           <Button
                             type="button"
-                            className="w-auto px-4"
-                            disabled={!apiKeyState?.data?.plaintext}
+                            className="h-9 w-auto px-3 text-xs"
+                            disabled={!apiKeyState?.data || apiKeyState?.isLoading}
                             onClick={() => toggleApiKeyVisibility(app.id)}
                           >
                             {apiKeyState?.isRevealed ? "Hide" : "Show"}
                           </Button>
                           <Button
                             type="button"
-                            className="w-auto px-4"
+                            className="h-9 w-auto px-3 text-xs"
                             disabled={!apiKeyState?.data?.plaintext}
                             onClick={() => copyApiKey(app.id)}
                           >
@@ -714,7 +714,7 @@ const HomePage = () => {
                           </Button>
                           <Button
                             type="button"
-                            className="w-auto px-4"
+                            className="h-9 w-auto px-3 text-xs"
                             onClick={() => rotateApiKey(app.id)}
                             disabled={apiKeyState?.isLoading}
                           >

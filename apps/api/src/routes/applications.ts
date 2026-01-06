@@ -25,6 +25,17 @@ const UpdateSettingsSchema = z.object({
   default_rank_id: z.string().uuid().nullable().optional(),
 });
 
+const ensureDeveloperApp = async (appId: string, developerId: string) => {
+  const application = await prisma.application.findFirst({
+    where: { id: appId, developerUserId: developerId },
+    select: { id: true },
+  });
+
+  if (!application) {
+    throw new Error("Application not found.");
+  }
+};
+
 export const registerApplicationRoutes = async (
   app: FastifyInstance,
 ): Promise<void> => {
@@ -251,7 +262,12 @@ export const registerApplicationRoutes = async (
       const { appId } = z
         .object({ appId: z.string().uuid() })
         .parse(request.params);
-      await ensureDeveloperApp(appId, request.developerUser.id);
+      try {
+        await ensureDeveloperApp(appId, request.developerUser.id);
+      } catch {
+        reply.code(404).send(errorResponse("not_found", "Application not found."));
+        return;
+      }
 
       const { apiKey, masked } = await ApiKeyService.ensureActiveKey(appId);
 
@@ -274,7 +290,12 @@ export const registerApplicationRoutes = async (
       const { appId } = z
         .object({ appId: z.string().uuid() })
         .parse(request.params);
-      await ensureDeveloperApp(appId, request.developerUser.id);
+      try {
+        await ensureDeveloperApp(appId, request.developerUser.id);
+      } catch {
+        reply.code(404).send(errorResponse("not_found", "Application not found."));
+        return;
+      }
 
       const rotated = await ApiKeyService.rotateKey(appId);
 
