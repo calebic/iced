@@ -40,6 +40,14 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 
+Write-Host "Generating Prisma client..." -ForegroundColor Yellow
+pnpm -C apps/api exec prisma generate
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Prisma client generation failed. Fix errors and re-run." -ForegroundColor Red
+  Wait-ForExit
+  exit 1
+}
+
 # API
 Start-Process powershell `
   -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot'; pnpm -C apps/api dev" `
