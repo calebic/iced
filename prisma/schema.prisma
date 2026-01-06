@@ -157,6 +157,7 @@ model ApiKey {
   lastUsedAt    DateTime?    @map("last_used_at")
 
   application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventLogs     EventLog[]
 
   @@index([applicationId])
   @@map("api_keys")
