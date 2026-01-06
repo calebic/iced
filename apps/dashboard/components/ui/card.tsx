@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 const Card = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "rounded-2xl border border-slate-800 bg-slate-900/40 p-8 shadow-lg shadow-slate-950/30",
+      "rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card-bg)] p-8 shadow-[var(--theme-card-shadow)]",
       className,
     )}
     {...props}
@@ -23,7 +23,7 @@ const CardDescription = ({
   className,
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) => (
-  <p className={cn("text-sm text-slate-300", className)} {...props} />
+  <p className={cn("text-sm text-[var(--theme-muted)]", className)} {...props} />
 );
 
 const CardContent = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (

@@ -9,6 +9,7 @@ const CreateLicenseSchema = z.object({
   rank_id: z.string().uuid(),
   pool_id: z.string().uuid().optional(),
   max_uses: z.number().int().positive().optional(),
+  duration_seconds: z.number().int().positive().optional(),
   expires_at: z.string().datetime().optional(),
 });
 
@@ -17,6 +18,7 @@ const BulkCreateSchema = z.object({
   pool_id: z.string().uuid().optional(),
   max_uses: z.number().int().positive().optional(),
   count: z.number().int().positive().max(1000),
+  duration_seconds: z.number().int().positive().optional(),
   expires_at: z.string().datetime().optional(),
 });
 
@@ -49,6 +51,7 @@ const formatLicense = (license: {
   status: string;
   maxUses: number | null;
   useCount: number;
+  durationSeconds: number | null;
   expiresAt: Date | null;
   redeemedAt: Date | null;
   redeemedById: string | null;
@@ -61,6 +64,7 @@ const formatLicense = (license: {
   status: license.status,
   max_uses: license.maxUses,
   use_count: license.useCount,
+  duration_seconds: license.durationSeconds,
   expires_at: license.expiresAt,
   redeemed_at: license.redeemedAt,
   redeemed_by_id: license.redeemedById,
@@ -95,6 +99,7 @@ export const registerLicenseRoutes = async (
         rank_id: rankId,
         pool_id: poolId,
         max_uses: maxUses,
+        duration_seconds: durationSeconds,
         expires_at: expiresAt,
       } = parsed.data;
       const { license, plaintextKey } = await LicenseService.createLicense(
@@ -102,6 +107,7 @@ export const registerLicenseRoutes = async (
         rankId,
         poolId,
         maxUses,
+        durationSeconds,
         toDate(expiresAt),
       );
 
@@ -135,6 +141,7 @@ export const registerLicenseRoutes = async (
         pool_id: poolId,
         max_uses: maxUses,
         count,
+        duration_seconds: durationSeconds,
         expires_at: expiresAt,
       } = parsed.data;
       const { licenses, plaintextKeys } =
@@ -144,6 +151,7 @@ export const registerLicenseRoutes = async (
           count,
           poolId,
           maxUses,
+          durationSeconds,
           toDate(expiresAt),
         );
 

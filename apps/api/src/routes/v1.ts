@@ -9,15 +9,21 @@ import { writeAuditLog } from "../audit";
 import { writeEventLog } from "../eventLog";
 
 const RegisterSchema = z.object({
-  email: z.string().email(),
+  username: z.string().trim().min(1),
   password: z.string().min(8),
-  license_key: z.string().min(1).optional(),
+  email: z.string().trim().email().optional(),
+  licenseCode: z.string().min(1).optional(),
 });
 
-const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+const LoginSchema = z
+  .object({
+    username: z.string().trim().min(1).optional(),
+    email: z.string().trim().email().optional(),
+    password: z.string().min(8),
+  })
+  .refine((data) => data.username || data.email, {
+    message: "Username or email required.",
+  });
 
 const RefreshSchema = z.object({
   refresh_token: z.string().min(1),
@@ -77,6 +83,39 @@ const issueTokens = async (params: {
   };
 };
 
+const applyRankExpiry = async (params: {
+  endUserId: string;
+  rankId: string | null;
+  rankExpiresAt: Date | null;
+  appDefaultRankId: string | null;
+}): Promise<{
+  rankId: string | null;
+  rankExpiresAt: Date | null;
+}> => {
+  if (!params.rankExpiresAt || params.rankExpiresAt > new Date()) {
+    return {
+      rankId: params.rankId,
+      rankExpiresAt: params.rankExpiresAt,
+    };
+  }
+
+  const updated = await prisma.endUser.update({
+    where: {
+      id: params.endUserId,
+    },
+    data: {
+      rankId: params.appDefaultRankId,
+      rankExpiresAt: null,
+      rankSourceLicenseId: null,
+    },
+  });
+
+  return {
+    rankId: updated.rankId ?? null,
+    rankExpiresAt: updated.rankExpiresAt,
+  };
+};
+
 export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
   app.register(async (router) => {
     router.addHook("preHandler", requireTenant);
@@ -101,84 +140,155 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           return;
         }
 
-        const { email, password, license_key } = parsed.data;
-        const passwordHash = hashPassword(password);
-
-        if (appTenant.licenseRequiredOnRegister && !license_key) {
+        const { username, password, email, licenseCode } = parsed.data;
+        const normalizedUsername = username.trim().toLowerCase();
+        if (!normalizedUsername) {
           reply
             .code(400)
-            .send(errorResponse("license_required", "License key required."));
+            .send(errorResponse("invalid_request", "Username required."));
           return;
         }
 
-        let rankId: string | null = appTenant.defaultRankId ?? null;
-        if (license_key) {
-          const licenseHash = hashToken(license_key);
-          const license = await prisma.license.findUnique({
-            where: {
-              codeHash: licenseHash,
-            },
-          });
-
-          if (
-            !license ||
-            license.applicationId !== appTenant.id ||
-            license.status !== "active" ||
-            (license.expiresAt && license.expiresAt <= new Date())
-          ) {
-            reply
-              .code(400)
-              .send(errorResponse("invalid_license", "Invalid license key."));
-            return;
-          }
-
-          rankId = license.rankId;
-
-          await prisma.license.update({
-            where: {
-              id: license.id,
-            },
-            data: {
-              status: "redeemed",
-              redeemedAt: new Date(),
-            },
-          });
+        if (appTenant.emailPolicy === "required" && !email) {
+          reply
+            .code(400)
+            .send(errorResponse("email_required", "Email required."));
+          return;
         }
 
+        if (appTenant.emailPolicy === "disabled" && email) {
+          reply
+            .code(400)
+            .send(errorResponse("email_not_allowed", "Email is disabled."));
+          return;
+        }
+
+        if (appTenant.licensePolicy === "required" && !licenseCode) {
+          reply
+            .code(400)
+            .send(errorResponse("license_required", "License code required."));
+          return;
+        }
+
+        if (appTenant.licensePolicy === "disabled" && licenseCode) {
+          reply
+            .code(400)
+            .send(
+              errorResponse("license_not_allowed", "License codes are disabled."),
+            );
+          return;
+        }
+
+        const passwordHash = hashPassword(password);
+        const now = new Date();
+        const licenseHash = licenseCode ? hashToken(licenseCode) : null;
+
         try {
-          const endUser = await prisma.endUser.create({
-            data: {
-              applicationId: appTenant.id,
-              email,
-              passwordHash,
-              rankId,
+          const { endUser, redeemedLicense } = await prisma.$transaction(
+            async (tx) => {
+              const createdEndUser = await tx.endUser.create({
+                data: {
+                  applicationId: appTenant.id,
+                  username: username.trim(),
+                  usernameNormalized: normalizedUsername,
+                  email: email ?? null,
+                  passwordHash,
+                  rankId: appTenant.defaultRankId ?? null,
+                },
+              });
+
+              let updatedEndUser = createdEndUser;
+              let redeemedLicense = null;
+
+              if (licenseCode && licenseHash) {
+                const license = await tx.license.findUnique({
+                  where: {
+                    codeHash: licenseHash,
+                  },
+                });
+
+                if (!license || license.applicationId !== appTenant.id) {
+                  throw new Error("license:Invalid license code.");
+                }
+
+                if (license.status !== "active" || license.revokedAt) {
+                  throw new Error("license:License is not active.");
+                }
+
+                if (license.expiresAt && license.expiresAt <= now) {
+                  await tx.license.update({
+                    where: { id: license.id },
+                    data: { status: "expired" },
+                  });
+                  throw new Error("license:License expired.");
+                }
+
+                if (license.maxUses && license.useCount >= license.maxUses) {
+                  await tx.license.update({
+                    where: { id: license.id },
+                    data: { status: "redeemed" },
+                  });
+                  throw new Error("license:License usage exhausted.");
+                }
+
+                const nextUseCount = license.useCount + 1;
+                const status =
+                  license.maxUses && nextUseCount >= license.maxUses
+                    ? "redeemed"
+                    : license.status;
+
+                redeemedLicense = await tx.license.update({
+                  where: {
+                    id: license.id,
+                  },
+                  data: {
+                    useCount: nextUseCount,
+                    redeemedAt: now,
+                    redeemedById: createdEndUser.id,
+                    status,
+                  },
+                });
+
+                const rankExpiresAt = redeemedLicense.durationSeconds
+                  ? new Date(
+                      now.getTime() + redeemedLicense.durationSeconds * 1000,
+                    )
+                  : null;
+
+                updatedEndUser = await tx.endUser.update({
+                  where: {
+                    id: createdEndUser.id,
+                  },
+                  data: {
+                    rankId: redeemedLicense.rankId,
+                    rankExpiresAt,
+                    rankSourceLicenseId: redeemedLicense.id,
+                  },
+                });
+              }
+
+              return {
+                endUser: updatedEndUser,
+                redeemedLicense,
+              };
             },
-          });
+          );
 
-          if (license_key) {
-            await prisma.license.update({
-              where: {
-                codeHash: hashToken(license_key),
-              },
-              data: {
-                redeemedById: endUser.id,
-              },
-            });
-
+          if (redeemedLicense) {
             await writeEventLog({
               appId: appTenant.id,
               eventType: "license.redeemed",
               request,
               statusCode: reply.statusCode,
               apiKeyId: request.tenantApiKeyId,
-              metadata: { licenseId: license?.id, endUserId: endUser.id },
+              metadata: { licenseId: redeemedLicense.id, endUserId: endUser.id },
             });
           }
 
           const tokens = await issueTokens({
             endUserId: endUser.id,
             appId: appTenant.id,
-            rankId,
+            rankId: endUser.rankId,
             accessTokenTtlSeconds: appTenant.accessTokenTtlSeconds,
             refreshTokenTtlSeconds: appTenant.refreshTokenTtlSeconds,
           });
@@ -202,9 +312,25 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           reply.send(successResponse(tokens));
         } catch (error) {
           request.log.error(error);
+          if (error instanceof Error && error.message.startsWith("license:")) {
+            reply
+              .code(400)
+              .send(
+                errorResponse(
+                  "invalid_license",
+                  error.message.replace("license:", ""),
+                ),
+              );
+            return;
+          }
           reply
             .code(409)
-            .send(errorResponse("conflict", "Email already registered."));
+            .send(
+              errorResponse(
+                "conflict",
+                "Username or email already registered.",
+              ),
+            );
         }
       },
     );
@@ -227,11 +353,13 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           return;
         }
 
-        const { email, password } = parsed.data;
+        const { username, email, password } = parsed.data;
+        const normalizedUsername = username ? username.trim().toLowerCase() : null;
         const endUser = await prisma.endUser.findFirst({
           where: {
             applicationId: appTenant.id,
-            email,
+            ...(email ? { email } : {}),
+            ...(normalizedUsername ? { usernameNormalized: normalizedUsername } : {}),
           },
         });
 
@@ -242,19 +370,28 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           return;
         }
 
-        await prisma.endUser.update({
+        const expiryResult = await applyRankExpiry({
+          endUserId: endUser.id,
+          rankId: endUser.rankId ?? null,
+          rankExpiresAt: endUser.rankExpiresAt ?? null,
+          appDefaultRankId: appTenant.defaultRankId ?? null,
+        });
+
+        const updatedEndUser = await prisma.endUser.update({
           where: {
             id: endUser.id,
           },
           data: {
             lastLoginAt: new Date(),
+            rankId: expiryResult.rankId,
+            rankExpiresAt: expiryResult.rankExpiresAt,
           },
         });
 
         const tokens = await issueTokens({
-          endUserId: endUser.id,
+          endUserId: updatedEndUser.id,
           appId: appTenant.id,
-          rankId: endUser.rankId,
+          rankId: updatedEndUser.rankId,
           accessTokenTtlSeconds: appTenant.accessTokenTtlSeconds,
           refreshTokenTtlSeconds: appTenant.refreshTokenTtlSeconds,
         });
@@ -495,12 +632,23 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           return;
         }
 
+        const expiryResult = await applyRankExpiry({
+          endUserId: endUser.id,
+          rankId: endUser.rankId ?? null,
+          rankExpiresAt: endUser.rankExpiresAt ?? null,
+          appDefaultRankId: appTenant.defaultRankId ?? null,
+        });
+
+        const currentRankId = expiryResult.rankId ?? null;
+        const permissions = await loadPermissions(currentRankId);
+
         reply.send(
           successResponse({
             id: endUser.id,
+            username: endUser.username,
             email: endUser.email,
-            rank_id: endUser.rankId,
-            permissions: payload.permissions,
+            rank_id: currentRankId,
+            permissions,
           }),
         );
       } catch (error) {

@@ -17,6 +17,12 @@ enum ApplicationStatus {
   disabled
 }
 
+enum RegistrationFieldPolicy {
+  required
+  optional
+  disabled
+}
+
 enum EndUserStatus {
   active
   disabled
@@ -109,7 +115,8 @@ model Application {
   allowedOrigins             String[]           @default([]) @map("allowed_origins")
   accessTokenTtlSeconds      Int                @map("access_token_ttl_seconds")
   refreshTokenTtlSeconds     Int                @map("refresh_token_ttl_seconds")
-  licenseRequiredOnRegister  Boolean            @default(false) @map("license_required_on_register")
+  emailPolicy                RegistrationFieldPolicy @default(required) @map("email_policy")
+  licensePolicy              RegistrationFieldPolicy @default(optional) @map("license_policy")
   defaultRankId              String?            @map("default_rank_id") @db.Uuid
   createdAt                  DateTime           @default(now()) @map("created_at")
   updatedAt                  DateTime           @updatedAt @map("updated_at")
@@ -167,8 +174,12 @@ model EndUser {
   id           String                @id @default(uuid()) @db.Uuid
   applicationId String               @map("application_id") @db.Uuid
   rankId       String?               @map("rank_id") @db.Uuid
-  email        String
+  username     String
+  usernameNormalized String          @map("username_normalized")
+  email        String?
   passwordHash String                @map("password_hash")
+  rankExpiresAt DateTime?            @map("rank_expires_at")
+  rankSourceLicenseId String?        @map("rank_source_license_id") @db.Uuid
   status       EndUserStatus         @default(active)
   createdAt    DateTime              @default(now()) @map("created_at")
   updatedAt    DateTime              @updatedAt @map("updated_at")
@@ -176,10 +187,12 @@ model EndUser {
 
   application  Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   rank         Rank?                 @relation(fields: [rankId], references: [id], onDelete: SetNull)
+  rankSourceLicense License?         @relation("RankSourceLicense", fields: [rankSourceLicenseId], references: [id], onDelete: SetNull)
   refreshTokens EndUserRefreshToken[]
   redeemedLicenses License[]         @relation("LicenseRedeemer")
 
   @@unique([applicationId, email])
+  @@unique([applicationId, usernameNormalized])
   @@index([applicationId])
   @@index([status])
   @@index([rankId])
@@ -261,6 +274,7 @@ model License {
   status        LicenseStatus @default(active)
   maxUses       Int?          @map("max_uses")
   useCount      Int           @default(0) @map("use_count")
+  durationSeconds Int?        @map("duration_seconds")
   expiresAt     DateTime?     @map("expires_at")
   redeemedAt    DateTime?     @map("redeemed_at")
   redeemedById  String?       @map("redeemed_by_id") @db.Uuid
@@ -272,6 +286,7 @@ model License {
   rank          Rank          @relation(fields: [rankId], references: [id], onDelete: Restrict)
   pool          LicensePool?  @relation(fields: [poolId], references: [id], onDelete: SetNull)
   redeemedBy    EndUser?      @relation("LicenseRedeemer", fields: [redeemedById], references: [id], onDelete: SetNull)
+  rankSourceEndUsers EndUser[] @relation("RankSourceLicense")
 
   @@index([applicationId])
   @@index([poolId])
