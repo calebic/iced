@@ -122,6 +122,9 @@ model Application {
   licenses                   License[]
   licensePools               LicensePool[]
   auditLogs                  AuditLog[]
+  eventLogs                  EventLog[]
+  webhooks                   Webhook[]
+  webhookDeliveries          WebhookDelivery[]
   defaultRank                Rank?              @relation("DefaultRank", fields: [defaultRankId], references: [id], onDelete: SetNull)
 
   @@index([developerUserId])
@@ -129,6 +132,7 @@ model Application {
   @@map("applications")
 }
 
+// License pools do not have a direct EventLog relation.
 model LicensePool {
   id            String       @id @default(uuid()) @db.Uuid
   applicationId String       @map("application_id") @db.Uuid
@@ -153,6 +157,7 @@ model ApiKey {
   lastUsedAt    DateTime?    @map("last_used_at")
 
   application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventLogs     EventLog[]   @relation("ApiKeyEventLogs")
 
   @@index([applicationId])
   @@map("api_keys")
@@ -196,6 +201,7 @@ model EndUserRefreshToken {
 
   @@index([endUserId])
   @@index([expiresAt])
+  @@unique([replacedById])
   @@map("end_user_refresh_tokens")
 }
 
@@ -212,6 +218,7 @@ model Rank {
   permissions   RankPermission[]
   licenses      License[]
   defaultFor    Application[] @relation("DefaultRank")
+  endUsers      EndUser[]
 
   @@unique([applicationId, name])
   @@index([applicationId])
@@ -304,7 +311,7 @@ model EventLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   application Application @relation(fields: [appId], references: [id], onDelete: Cascade)
-  apiKey      ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  apiKey      ApiKey?      @relation("ApiKeyEventLogs", fields: [apiKeyId], references: [id], onDelete: SetNull)
 
   @@index([appId])
   @@index([eventType])
