@@ -19,6 +19,14 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "Starting services..." -ForegroundColor Green
 
+Write-Host "Building shared package..." -ForegroundColor Yellow
+pnpm -C packages/shared build
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Shared package build failed. Fix errors and re-run." -ForegroundColor Red
+  pause
+  exit 1
+}
+
 # API
 Start-Process powershell `
   -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot'; pnpm -C apps/api dev" `
