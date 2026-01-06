@@ -49,6 +49,8 @@ const createPrismaMock = () => {
     developerUsers: [] as Array<{
       id: string;
       email: string;
+      username: string;
+      usernameNormalized: string;
       passwordHash: string;
       status: "active" | "disabled";
       createdAt: Date;
@@ -145,6 +147,45 @@ const createPrismaMock = () => {
     developerUser: {
       findUnique: async ({ where }: { where: { email: string } }) =>
         data.developerUsers.find((user) => user.email === where.email) ?? null,
+      findFirst: async ({
+        where,
+      }: {
+        where: {
+          OR: Array<{ email?: string; usernameNormalized?: string }>;
+        };
+      }) =>
+        data.developerUsers.find((user) =>
+          where.OR.some(
+            (condition) =>
+              (condition.email && user.email === condition.email) ||
+              (condition.usernameNormalized &&
+                user.usernameNormalized === condition.usernameNormalized),
+          ),
+        ) ?? null,
+      create: async ({
+        data: newUser,
+      }: {
+        data: {
+          email: string;
+          username: string;
+          usernameNormalized: string;
+          passwordHash: string;
+          status: "active" | "disabled";
+        };
+      }) => {
+        const created = {
+          id: `dev-${data.developerUsers.length + 1}`,
+          email: newUser.email,
+          username: newUser.username,
+          usernameNormalized: newUser.usernameNormalized,
+          passwordHash: newUser.passwordHash,
+          status: newUser.status,
+          createdAt: new Date(),
+          disabledAt: null,
+        };
+        data.developerUsers.push(created);
+        return created;
+      },
     },
     developerSession: {
       create: async () => ({ id: "session-1" }),
@@ -324,6 +365,8 @@ test("disabled developer cannot login", async () => {
   prismaMock.data.developerUsers.push({
     id: "dev-1",
     email: "dev@example.com",
+    username: "dev",
+    usernameNormalized: "dev",
     passwordHash: hashPassword(password),
     status: "disabled",
     createdAt: new Date(),
@@ -341,6 +384,27 @@ test("disabled developer cannot login", async () => {
   });
 
   assert.equal(response.statusCode, 403);
+  await app.close();
+});
+
+test("dashboard register returns success with valid input", async () => {
+  prismaMock.reset();
+
+  const app = await buildApp();
+  const response = await app.inject({
+    method: "POST",
+    url: "/dashboard/auth/register",
+    payload: {
+      username: "NewUser",
+      email: "newuser@example.com",
+      password: "password123",
+    },
+  });
+
+  assert.equal(response.statusCode, 201);
+  const payload = response.json();
+  assert.equal(payload.success, true);
+  assert.equal(prismaMock.data.developerUsers.length, 1);
   await app.close();
 });
 

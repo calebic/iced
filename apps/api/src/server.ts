@@ -63,7 +63,11 @@ export const buildServer = () => {
   app.register(registerEndUserRoutes, { prefix: "/dashboard" });
   app.register(registerV1Routes);
 
-  app.get("/health", async () => ({ status: "ok" }));
+  app.get("/health", async () => ({
+    ok: true,
+    service: "iced-api",
+    time: new Date().toISOString(),
+  }));
 
   app.addHook("onReady", async () => {
     app.log.info({ env: env.NODE_ENV }, "Iced API server ready");

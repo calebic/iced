@@ -18,6 +18,24 @@ function Wait-ForExit {
   }
 }
 
+function Assert-PortAvailable {
+  param (
+    [int]$Port,
+    [string]$ServiceName
+  )
+
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+    $listener.Start()
+    $listener.Stop()
+  } catch {
+    Write-Host "$ServiceName cannot start because port $Port is already in use." -ForegroundColor Red
+    Write-Host "Stop the process using port $Port and re-run the launcher." -ForegroundColor Yellow
+    Wait-ForExit
+    exit 1
+  }
+}
+
 # Ensure we are in the repo root
 Set-Location $PSScriptRoot
 
@@ -31,6 +49,10 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "Starting services..." -ForegroundColor Green
+
+Assert-PortAvailable -Port 3001 -ServiceName "Dashboard"
+Assert-PortAvailable -Port 3002 -ServiceName "API"
+Assert-PortAvailable -Port 3003 -ServiceName "Owner Panel"
 
 Write-Host "Building shared package..." -ForegroundColor Yellow
 pnpm -C packages/shared build
@@ -52,7 +74,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # API
 Start-Process powershell `
-  -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot'; pnpm -C apps/api dev" `
+  -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot'; `$env:PORT=3002; pnpm -C apps/api dev" `
   -WindowStyle Normal
 
 # Dashboard
@@ -67,6 +89,9 @@ Start-Process powershell `
 
 Write-Host ""
 Write-Host "Services launched." -ForegroundColor Green
-Write-Host "Check the opened windows for URLs." -ForegroundColor Green
+Write-Host "Service -> URL" -ForegroundColor Green
+Write-Host "Dashboard -> http://127.0.0.1:3001" -ForegroundColor Green
+Write-Host "API -> http://127.0.0.1:3002" -ForegroundColor Green
+Write-Host "Owner Panel -> http://127.0.0.1:3003" -ForegroundColor Green
 Write-Host ""
 Wait-ForExit

@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "node ../../scripts/ensure-port.mjs 3002 API && tsx src/index.ts",
     "test": "node --test --loader tsx src/tests/**/*.test.ts"
   },
   "dependencies": {
