@@ -16,7 +16,6 @@ function Wait-ForExit {
   if ($Host.Name -eq "ConsoleHost") {
     Read-Host "Press Enter to exit"
   }
-  Read-Host "Press Enter to exit"
 }
 
 # Ensure we are in the repo root
@@ -44,36 +43,6 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Generating Prisma client..." -ForegroundColor Yellow
 $schemaPath = Join-Path $PSScriptRoot "prisma/schema.prisma"
 pnpm -C apps/api exec prisma generate --schema "$schemaPath"
-Write-Host "Ensuring Prisma CLI dependencies are installed..." -ForegroundColor Yellow
-$needsPrismaInstall = $false
-pnpm -w exec node -e "require.resolve('prisma/package.json')" 2>$null
-if ($LASTEXITCODE -ne 0) {
-  $needsPrismaInstall = $true
-}
-pnpm -w exec node -e "require.resolve('@prisma/client/package.json')" 2>$null
-if ($LASTEXITCODE -ne 0) {
-  $needsPrismaInstall = $true
-}
-if ($needsPrismaInstall) {
-  Write-Host "Installing Prisma CLI dependencies at workspace root..." -ForegroundColor Yellow
-  pnpm -w add -D prisma @prisma/client
-  if ($LASTEXITCODE -ne 0) {
-    Write-Host "Prisma dependency install failed. Fix errors and re-run." -ForegroundColor Red
-    Wait-ForExit
-    exit 1
-  }
-}
-
-Write-Host "Validating Prisma schema..." -ForegroundColor Yellow
-pnpm -w exec prisma format --schema "$schemaPath"
-if ($LASTEXITCODE -ne 0) {
-  Write-Host "Prisma schema validation failed. Fix errors and re-run." -ForegroundColor Red
-  Wait-ForExit
-  exit 1
-}
-
-Write-Host "Generating Prisma client..." -ForegroundColor Yellow
-pnpm -w exec prisma generate --schema "$schemaPath"
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Prisma client generation failed. Fix errors and re-run." -ForegroundColor Red
   Write-Host "If Prisma is blocked by pnpm, run: pnpm approve-builds" -ForegroundColor Yellow
@@ -99,3 +68,5 @@ Start-Process powershell `
 Write-Host ""
 Write-Host "Services launched." -ForegroundColor Green
 Write-Host "Check the opened windows for URLs." -ForegroundColor Green
+Write-Host ""
+Wait-ForExit

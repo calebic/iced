@@ -42,26 +42,26 @@ enum WebhookDeliveryStatus {
 }
 
 model OwnerUser {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String         @id @default(uuid()) @db.Uuid
+  email        String         @unique
+  passwordHash String         @map("password_hash")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
 
-  sessions OwnerSession[]
+  sessions     OwnerSession[]
 
   @@map("owner_users")
 }
 
 model OwnerSession {
-  id               String    @id @default(uuid()) @db.Uuid
-  ownerUserId      String    @map("owner_user_id") @db.Uuid
-  sessionTokenHash String    @map("session_token_hash")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  expiresAt        DateTime  @map("expires_at")
-  revokedAt        DateTime? @map("revoked_at")
+  id               String     @id @default(uuid()) @db.Uuid
+  ownerUserId      String     @map("owner_user_id") @db.Uuid
+  sessionTokenHash String     @map("session_token_hash")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  expiresAt        DateTime   @map("expires_at")
+  revokedAt        DateTime?  @map("revoked_at")
 
-  ownerUser OwnerUser @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  ownerUser        OwnerUser  @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
   @@index([ownerUserId])
   @@index([expiresAt])
@@ -69,15 +69,15 @@ model OwnerSession {
 }
 
 model DeveloperUser {
-  id                 String          @id @default(uuid()) @db.Uuid
-  username           String          @map("username")
-  usernameNormalized String          @unique @map("username_normalized")
-  email              String          @unique
-  passwordHash       String          @map("password_hash")
-  status             DeveloperStatus @default(active)
-  disabledAt         DateTime?       @map("disabled_at")
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
+  id                 String            @id @default(uuid()) @db.Uuid
+  username           String            @map("username")
+  usernameNormalized String            @unique @map("username_normalized")
+  email              String            @unique
+  passwordHash       String            @map("password_hash")
+  status             DeveloperStatus   @default(active)
+  disabledAt         DateTime?         @map("disabled_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
 
   sessions     DeveloperSession[]
   applications Application[]
@@ -87,14 +87,14 @@ model DeveloperUser {
 }
 
 model DeveloperSession {
-  id               String    @id @default(uuid()) @db.Uuid
-  developerUserId  String    @map("developer_user_id") @db.Uuid
-  sessionTokenHash String    @map("session_token_hash")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  expiresAt        DateTime  @map("expires_at")
-  revokedAt        DateTime? @map("revoked_at")
+  id               String         @id @default(uuid()) @db.Uuid
+  developerUserId  String         @map("developer_user_id") @db.Uuid
+  sessionTokenHash String         @map("session_token_hash")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  expiresAt        DateTime       @map("expires_at")
+  revokedAt        DateTime?      @map("revoked_at")
 
-  developerUser DeveloperUser @relation(fields: [developerUserId], references: [id], onDelete: Cascade)
+  developerUser    DeveloperUser  @relation(fields: [developerUserId], references: [id], onDelete: Cascade)
 
   @@index([developerUserId])
   @@index([expiresAt])
@@ -102,30 +102,30 @@ model DeveloperSession {
 }
 
 model Application {
-  id                        String            @id @default(uuid()) @db.Uuid
-  developerUserId           String            @map("developer_user_id") @db.Uuid
-  name                      String
-  status                    ApplicationStatus @default(active)
-  allowedOrigins            String[]          @default([]) @map("allowed_origins")
-  accessTokenTtlSeconds     Int               @map("access_token_ttl_seconds")
-  refreshTokenTtlSeconds    Int               @map("refresh_token_ttl_seconds")
-  licenseRequiredOnRegister Boolean           @default(false) @map("license_required_on_register")
-  defaultRankId             String?           @map("default_rank_id") @db.Uuid
-  createdAt                 DateTime          @default(now()) @map("created_at")
-  updatedAt                 DateTime          @updatedAt @map("updated_at")
+  id                         String             @id @default(uuid()) @db.Uuid
+  developerUserId            String             @map("developer_user_id") @db.Uuid
+  name                       String
+  status                     ApplicationStatus  @default(active)
+  allowedOrigins             String[]           @default([]) @map("allowed_origins")
+  accessTokenTtlSeconds      Int                @map("access_token_ttl_seconds")
+  refreshTokenTtlSeconds     Int                @map("refresh_token_ttl_seconds")
+  licenseRequiredOnRegister  Boolean            @default(false) @map("license_required_on_register")
+  defaultRankId              String?            @map("default_rank_id") @db.Uuid
+  createdAt                  DateTime           @default(now()) @map("created_at")
+  updatedAt                  DateTime           @updatedAt @map("updated_at")
 
-  developerUser     DeveloperUser     @relation(fields: [developerUserId], references: [id], onDelete: Cascade)
-  apiKeys           ApiKey[]
-  endUsers          EndUser[]
-  ranks             Rank[]
-  permissions       Permission[]
-  licenses          License[]
-  licensePools      LicensePool[]
-  auditLogs         AuditLog[]
-  eventLogs         EventLog[]
-  webhooks          Webhook[]
-  webhookDeliveries WebhookDelivery[]
-  defaultRank       Rank?             @relation("DefaultRank", fields: [defaultRankId], references: [id], onDelete: SetNull)
+  developerUser              DeveloperUser      @relation(fields: [developerUserId], references: [id], onDelete: Cascade)
+  apiKeys                    ApiKey[]
+  endUsers                   EndUser[]
+  ranks                      Rank[]
+  permissions                Permission[]
+  licenses                   License[]
+  licensePools               LicensePool[]
+  auditLogs                  AuditLog[]
+  eventLogs                  EventLog[]
+  webhooks                   Webhook[]
+  webhookDeliveries          WebhookDelivery[]
+  defaultRank                Rank?              @relation("DefaultRank", fields: [defaultRankId], references: [id], onDelete: SetNull)
 
   @@index([developerUserId])
   @@index([status])
@@ -134,14 +134,15 @@ model Application {
 
 // License pools do not have a direct EventLog relation.
 model LicensePool {
-  id            String   @id @default(uuid()) @db.Uuid
-  applicationId String   @map("application_id") @db.Uuid
+  id            String       @id @default(uuid()) @db.Uuid
+  applicationId String       @map("application_id") @db.Uuid
   name          String
   description   String?
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
 
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  licenses    License[]
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventLogs     EventLog[]
+  licenses      License[]
 
   @@unique([applicationId, name])
   @@index([applicationId])
@@ -149,35 +150,35 @@ model LicensePool {
 }
 
 model ApiKey {
-  id            String    @id @default(uuid()) @db.Uuid
-  applicationId String    @map("application_id") @db.Uuid
-  keyHash       String    @unique @map("key_hash")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  revokedAt     DateTime? @map("revoked_at")
-  lastUsedAt    DateTime? @map("last_used_at")
+  id            String       @id @default(uuid()) @db.Uuid
+  applicationId String       @map("application_id") @db.Uuid
+  keyHash       String       @unique @map("key_hash")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  revokedAt     DateTime?    @map("revoked_at")
+  lastUsedAt    DateTime?    @map("last_used_at")
 
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  eventLogs   EventLog[]  @relation("ApiKeyEventLogs")
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventLogs     EventLog[]   @relation("ApiKeyEventLogs")
 
   @@index([applicationId])
   @@map("api_keys")
 }
 
 model EndUser {
-  id            String        @id @default(uuid()) @db.Uuid
-  applicationId String        @map("application_id") @db.Uuid
-  rankId        String?       @map("rank_id") @db.Uuid
-  email         String
-  passwordHash  String        @map("password_hash")
-  status        EndUserStatus @default(active)
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  lastLoginAt   DateTime?     @map("last_login_at")
+  id           String                @id @default(uuid()) @db.Uuid
+  applicationId String               @map("application_id") @db.Uuid
+  rankId       String?               @map("rank_id") @db.Uuid
+  email        String
+  passwordHash String                @map("password_hash")
+  status       EndUserStatus         @default(active)
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  lastLoginAt  DateTime?             @map("last_login_at")
 
-  application      Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  rank             Rank?                 @relation(fields: [rankId], references: [id], onDelete: SetNull)
-  refreshTokens    EndUserRefreshToken[]
-  redeemedLicenses License[]             @relation("LicenseRedeemer")
+  application  Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  rank         Rank?                 @relation(fields: [rankId], references: [id], onDelete: SetNull)
+  refreshTokens EndUserRefreshToken[]
+  redeemedLicenses License[]         @relation("LicenseRedeemer")
 
   @@unique([applicationId, email])
   @@index([applicationId])
@@ -187,38 +188,38 @@ model EndUser {
 }
 
 model EndUserRefreshToken {
-  id           String    @id @default(uuid()) @db.Uuid
-  endUserId    String    @map("end_user_id") @db.Uuid
-  tokenHash    String    @unique @map("token_hash")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  expiresAt    DateTime  @map("expires_at")
-  revokedAt    DateTime? @map("revoked_at")
-  replacedById String?   @map("replaced_by_id") @db.Uuid
+  id            String     @id @default(uuid()) @db.Uuid
+  endUserId     String     @map("end_user_id") @db.Uuid
+  tokenHash     String     @unique @map("token_hash")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  expiresAt     DateTime   @map("expires_at")
+  revokedAt     DateTime?  @map("revoked_at")
+  replacedById  String?    @map("replaced_by_id") @db.Uuid
 
-  endUser       EndUser              @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  endUser       EndUser    @relation(fields: [endUserId], references: [id], onDelete: Cascade)
   replacedBy    EndUserRefreshToken? @relation("RefreshTokenRotation", fields: [replacedById], references: [id])
   replacedToken EndUserRefreshToken? @relation("RefreshTokenRotation")
 
-  @@unique([replacedById])
   @@index([endUserId])
   @@index([expiresAt])
+  @@unique([replacedById])
   @@map("end_user_refresh_tokens")
 }
 
 model Rank {
-  id            String   @id @default(uuid()) @db.Uuid
-  applicationId String   @map("application_id") @db.Uuid
+  id            String        @id @default(uuid()) @db.Uuid
+  applicationId String        @map("application_id") @db.Uuid
   name          String
   description   String?
   priority      Int
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  application Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  permissions RankPermission[]
-  licenses    License[]
-  defaultFor  Application[]    @relation("DefaultRank")
-  endUsers    EndUser[]
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  permissions   RankPermission[]
+  licenses      License[]
+  defaultFor    Application[] @relation("DefaultRank")
+  endUsers      EndUser[]
 
   @@unique([applicationId, name])
   @@index([applicationId])
@@ -226,15 +227,15 @@ model Rank {
 }
 
 model Permission {
-  id            String   @id @default(uuid()) @db.Uuid
-  applicationId String   @map("application_id") @db.Uuid
+  id            String           @id @default(uuid()) @db.Uuid
+  applicationId String           @map("application_id") @db.Uuid
   name          String
   description   String?
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
 
-  application Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  ranks       RankPermission[]
+  application   Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  ranks         RankPermission[]
 
   @@unique([applicationId, name])
   @@index([applicationId])
@@ -242,11 +243,11 @@ model Permission {
 }
 
 model RankPermission {
-  rankId       String @map("rank_id") @db.Uuid
-  permissionId String @map("permission_id") @db.Uuid
+  rankId       String      @map("rank_id") @db.Uuid
+  permissionId String      @map("permission_id") @db.Uuid
 
-  rank       Rank       @relation(fields: [rankId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  rank         Rank        @relation(fields: [rankId], references: [id], onDelete: Cascade)
+  permission   Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([rankId, permissionId])
   @@map("rank_permissions")
@@ -268,10 +269,10 @@ model License {
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  application Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  rank        Rank         @relation(fields: [rankId], references: [id], onDelete: Restrict)
-  pool        LicensePool? @relation(fields: [poolId], references: [id], onDelete: SetNull)
-  redeemedBy  EndUser?     @relation("LicenseRedeemer", fields: [redeemedById], references: [id], onDelete: SetNull)
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  rank          Rank          @relation(fields: [rankId], references: [id], onDelete: Restrict)
+  pool          LicensePool?  @relation(fields: [poolId], references: [id], onDelete: SetNull)
+  redeemedBy    EndUser?      @relation("LicenseRedeemer", fields: [redeemedById], references: [id], onDelete: SetNull)
 
   @@index([applicationId])
   @@index([poolId])
@@ -280,13 +281,13 @@ model License {
 }
 
 model AuditLog {
-  id        String    @id @default(uuid()) @db.Uuid
-  actorType ActorType @map("actor_type")
-  actorId   String    @map("actor_id") @db.Uuid
-  appId     String?   @map("app_id") @db.Uuid
-  action    String
-  metadata  Json      @default("{}")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id         String     @id @default(uuid()) @db.Uuid
+  actorType  ActorType  @map("actor_type")
+  actorId    String     @map("actor_id") @db.Uuid
+  appId      String?    @map("app_id") @db.Uuid
+  action     String
+  metadata   Json       @default("{}")
+  createdAt  DateTime   @default(now()) @map("created_at")
 
   application Application? @relation(fields: [appId], references: [id], onDelete: SetNull)
 
@@ -311,7 +312,7 @@ model EventLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   application Application @relation(fields: [appId], references: [id], onDelete: Cascade)
-  apiKey      ApiKey?     @relation("ApiKeyEventLogs", fields: [apiKeyId], references: [id], onDelete: SetNull)
+  apiKey      ApiKey?      @relation("ApiKeyEventLogs", fields: [apiKeyId], references: [id], onDelete: SetNull)
 
   @@index([appId])
   @@index([eventType])
@@ -320,16 +321,16 @@ model EventLog {
 }
 
 model Webhook {
-  id           String   @id @default(uuid()) @db.Uuid
-  appId        String   @map("app_id") @db.Uuid
-  url          String
-  secretCipher String   @map("secret_cipher")
-  enabled      Boolean  @default(true)
-  events       String[]
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  appId         String   @map("app_id") @db.Uuid
+  url           String
+  secretCipher  String   @map("secret_cipher")
+  enabled       Boolean  @default(true)
+  events        String[]
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  application Application       @relation(fields: [appId], references: [id], onDelete: Cascade)
-  deliveries  WebhookDelivery[]
+  application   Application       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  deliveries    WebhookDelivery[]
 
   @@index([appId])
   @@map("webhooks")
@@ -349,8 +350,8 @@ model WebhookDelivery {
   createdAt      DateTime              @default(now()) @map("created_at")
   updatedAt      DateTime              @updatedAt @map("updated_at")
 
-  webhook     Webhook     @relation(fields: [webhookId], references: [id], onDelete: Cascade)
-  application Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  webhook        Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  application    Application           @relation(fields: [appId], references: [id], onDelete: Cascade)
 
   @@index([appId])
   @@index([webhookId])

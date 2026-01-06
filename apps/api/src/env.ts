@@ -1,16 +1,8 @@
-import path from "path";
-import { fileURLToPath } from "url";
-import { config } from "dotenv";
+import path from "node:path";
+import dotenv from "dotenv";
 import { z } from "zod";
 
-// ESM-safe __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load env from repo root (.env)
-config({
-  path: path.resolve(__dirname, "../../../.env"),
-});
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -26,4 +18,5 @@ const EnvSchema = z.object({
 });
 
 export type Env = z.infer<typeof EnvSchema>;
+
 export const env = EnvSchema.parse(process.env);
