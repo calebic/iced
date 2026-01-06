@@ -141,6 +141,7 @@ model LicensePool {
   createdAt     DateTime     @default(now()) @map("created_at")
 
   application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  eventLogs     EventLog[]
   licenses      License[]
 
   @@unique([applicationId, name])
