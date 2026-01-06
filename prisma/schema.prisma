@@ -132,6 +132,7 @@ model Application {
   @@map("applications")
 }
 
+// License pools do not have a direct EventLog relation.
 model LicensePool {
   id            String       @id @default(uuid()) @db.Uuid
   applicationId String       @map("application_id") @db.Uuid
