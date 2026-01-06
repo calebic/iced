@@ -1,8 +1,16 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { z } from "zod";
 
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+// ESM-safe __dirname replacement
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load env in a few common locations (first match wins for missing vars)
+dotenv.config({ path: path.resolve(__dirname, "../.env") });        // apps/api/.env
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });  // repo root .env
+dotenv.config();                                                   // fallback: process.cwd()
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
