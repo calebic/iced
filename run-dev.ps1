@@ -41,9 +41,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Generating Prisma client..." -ForegroundColor Yellow
-pnpm -C apps/api exec prisma generate
+$schemaPath = Join-Path $PSScriptRoot "prisma/schema.prisma"
+pnpm -C apps/api exec prisma generate --schema "$schemaPath"
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Prisma client generation failed. Fix errors and re-run." -ForegroundColor Red
+  Write-Host "If Prisma is blocked by pnpm, run: pnpm approve-builds" -ForegroundColor Yellow
   Wait-ForExit
   exit 1
 }
