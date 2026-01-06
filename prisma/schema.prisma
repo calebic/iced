@@ -157,7 +157,7 @@ model ApiKey {
   lastUsedAt    DateTime?    @map("last_used_at")
 
   application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  eventLogs     EventLog[]
+  eventLogs     EventLog[]   @relation("ApiKeyEventLogs")
 
   @@index([applicationId])
   @@map("api_keys")
@@ -311,7 +311,7 @@ model EventLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   application Application @relation(fields: [appId], references: [id], onDelete: Cascade)
-  apiKey      ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  apiKey      ApiKey?      @relation("ApiKeyEventLogs", fields: [apiKeyId], references: [id], onDelete: SetNull)
 
   @@index([appId])
   @@index([eventType])
