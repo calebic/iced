@@ -12,7 +12,8 @@ const CreateAppSchema = z.object({
   allowed_origins: z.array(z.string()).default([]),
   access_token_ttl_seconds: z.number().int().positive().default(900),
   refresh_token_ttl_seconds: z.number().int().positive().default(1209600),
-  license_required_on_register: z.boolean().default(false),
+  email_policy: z.enum(["required", "optional", "disabled"]).default("required"),
+  license_policy: z.enum(["required", "optional", "disabled"]).default("optional"),
   default_rank_id: z.string().uuid().optional(),
 });
 
@@ -20,7 +21,8 @@ const UpdateSettingsSchema = z.object({
   allowed_origins: z.array(z.string()).optional(),
   access_token_ttl_seconds: z.number().int().positive().optional(),
   refresh_token_ttl_seconds: z.number().int().positive().optional(),
-  license_required_on_register: z.boolean().optional(),
+  email_policy: z.enum(["required", "optional", "disabled"]).optional(),
+  license_policy: z.enum(["required", "optional", "disabled"]).optional(),
   default_rank_id: z.string().uuid().nullable().optional(),
 });
 
@@ -85,7 +87,8 @@ export const registerApplicationRoutes = async (
           allowedOrigins: payload.allowed_origins,
           accessTokenTtlSeconds: payload.access_token_ttl_seconds,
           refreshTokenTtlSeconds: payload.refresh_token_ttl_seconds,
-          licenseRequiredOnRegister: payload.license_required_on_register,
+          emailPolicy: payload.email_policy,
+          licensePolicy: payload.license_policy,
           defaultRankId: payload.default_rank_id ?? null,
         },
       });
@@ -129,6 +132,8 @@ export const registerApplicationRoutes = async (
             name: appItem.name,
             status: appItem.status,
             created_at: appItem.createdAt,
+            email_policy: appItem.emailPolicy,
+            license_policy: appItem.licensePolicy,
           })),
         ),
       );
@@ -163,7 +168,8 @@ export const registerApplicationRoutes = async (
           allowed_origins: application.allowedOrigins,
           access_token_ttl_seconds: application.accessTokenTtlSeconds,
           refresh_token_ttl_seconds: application.refreshTokenTtlSeconds,
-          license_required_on_register: application.licenseRequiredOnRegister,
+          email_policy: application.emailPolicy,
+          license_policy: application.licensePolicy,
           default_rank_id: application.defaultRankId,
           created_at: application.createdAt,
         }),
@@ -225,9 +231,8 @@ export const registerApplicationRoutes = async (
           refreshTokenTtlSeconds:
             parsed.data.refresh_token_ttl_seconds ??
             application.refreshTokenTtlSeconds,
-          licenseRequiredOnRegister:
-            parsed.data.license_required_on_register ??
-            application.licenseRequiredOnRegister,
+          emailPolicy: parsed.data.email_policy ?? application.emailPolicy,
+          licensePolicy: parsed.data.license_policy ?? application.licensePolicy,
           defaultRankId:
             parsed.data.default_rank_id === undefined
               ? application.defaultRankId
@@ -250,7 +255,8 @@ export const registerApplicationRoutes = async (
           allowed_origins: updated.allowedOrigins,
           access_token_ttl_seconds: updated.accessTokenTtlSeconds,
           refresh_token_ttl_seconds: updated.refreshTokenTtlSeconds,
-          license_required_on_register: updated.licenseRequiredOnRegister,
+          email_policy: updated.emailPolicy,
+          license_policy: updated.licensePolicy,
           default_rank_id: updated.defaultRankId,
         }),
       );

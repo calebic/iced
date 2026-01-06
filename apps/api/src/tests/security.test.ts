@@ -29,14 +29,35 @@ const createPrismaMock = () => {
         accessTokenTtlSeconds: number;
         refreshTokenTtlSeconds: number;
         defaultRankId: string | null;
-        licenseRequiredOnRegister: boolean;
+        emailPolicy: "required" | "optional" | "disabled";
+        licensePolicy: "required" | "optional" | "disabled";
       };
     }>,
     endUsers: [] as Array<{
       id: string;
       applicationId: string;
-      email: string;
+      username: string;
+      usernameNormalized: string;
+      email: string | null;
+      passwordHash?: string;
       rankId: string | null;
+      rankExpiresAt?: Date | null;
+      rankSourceLicenseId?: string | null;
+      lastLoginAt?: Date | null;
+    }>,
+    licenses: [] as Array<{
+      id: string;
+      applicationId: string;
+      rankId: string;
+      codeHash: string;
+      status: "active" | "redeemed" | "revoked" | "expired";
+      maxUses: number | null;
+      useCount: number;
+      durationSeconds: number | null;
+      expiresAt: Date | null;
+      redeemedAt: Date | null;
+      redeemedById: string | null;
+      revokedAt: Date | null;
     }>,
     refreshTokens: [] as Array<{
       id: string;
@@ -63,6 +84,7 @@ const createPrismaMock = () => {
     reset() {
       data.apiKeys = [];
       data.endUsers = [];
+      data.licenses = [];
       data.refreshTokens = [];
       data.developerUsers = [];
     },
@@ -78,15 +100,93 @@ const createPrismaMock = () => {
       findFirst: async ({
         where,
       }: {
-        where: { applicationId: string; email: string };
+        where: {
+          applicationId: string;
+          email?: string;
+          usernameNormalized?: string;
+        };
       }) =>
         data.endUsers.find(
           (user) =>
             user.applicationId === where.applicationId &&
-            user.email === where.email,
+            (where.email ? user.email === where.email : true) &&
+            (where.usernameNormalized
+              ? user.usernameNormalized === where.usernameNormalized
+              : true),
         ) ?? null,
-      update: async ({ where }: { where: { id: string } }) =>
-        data.endUsers.find((user) => user.id === where.id) ?? null,
+      create: async ({
+        data: newUser,
+      }: {
+        data: {
+          applicationId: string;
+          username: string;
+          usernameNormalized: string;
+          email: string | null;
+          passwordHash: string;
+          rankId: string | null;
+        };
+      }) => {
+        const created = {
+          id: `user-${data.endUsers.length + 1}`,
+          applicationId: newUser.applicationId,
+          username: newUser.username,
+          usernameNormalized: newUser.usernameNormalized,
+          email: newUser.email,
+          passwordHash: newUser.passwordHash,
+          rankId: newUser.rankId,
+          rankExpiresAt: null,
+          rankSourceLicenseId: null,
+        };
+        data.endUsers.push(created);
+        return created;
+      },
+      update: async ({
+        where,
+        data: update,
+      }: {
+        where: { id: string };
+        data: {
+          rankId?: string | null;
+          rankExpiresAt?: Date | null;
+          rankSourceLicenseId?: string | null;
+          lastLoginAt?: Date | null;
+        };
+      }) => {
+        const user = data.endUsers.find((item) => item.id === where.id);
+        if (!user) return null;
+        if (update.rankId !== undefined) user.rankId = update.rankId;
+        if (update.rankExpiresAt !== undefined) {
+          user.rankExpiresAt = update.rankExpiresAt;
+        }
+        if (update.rankSourceLicenseId !== undefined) {
+          user.rankSourceLicenseId = update.rankSourceLicenseId;
+        }
+        if (update.lastLoginAt !== undefined) {
+          user.lastLoginAt = update.lastLoginAt ?? null;
+        }
+        return user;
+      },
+    },
+    license: {
+      findUnique: async ({ where }: { where: { codeHash: string } }) =>
+        data.licenses.find((item) => item.codeHash === where.codeHash) ?? null,
+      update: async ({
+        where,
+        data: update,
+      }: {
+        where: { id: string };
+        data: Partial<{
+          status: "active" | "redeemed" | "revoked" | "expired";
+          useCount: number;
+          redeemedAt: Date | null;
+          redeemedById: string | null;
+        }>;
+      }) => {
+        const license = data.licenses.find((item) => item.id === where.id);
+        if (!license) return null;
+        Object.assign(license, update);
+        return license;
+      },
     },
     endUserRefreshToken: {
       findFirst: async ({ where }: { where: { tokenHash: string } }) =>
@@ -191,10 +291,20 @@ const createPrismaMock = () => {
       create: async () => ({ id: "session-1" }),
       findFirst: async () => null,
     },
+    rankPermission: {
+      findMany: async () => [],
+    },
     ownerSession: {
       findFirst: async () => null,
     },
-    $transaction: async (ops: Array<Promise<unknown>>) => Promise.all(ops),
+    $transaction: async (
+      ops: Array<Promise<unknown>> | ((tx: PrismaMock) => Promise<unknown>),
+    ) => {
+      if (typeof ops === "function") {
+        return ops(prismaMock);
+      }
+      return Promise.all(ops);
+    },
   };
 };
 
@@ -236,7 +346,8 @@ test("tenant isolation blocks cross-app access tokens", async () => {
       accessTokenTtlSeconds: 900,
       refreshTokenTtlSeconds: 1200,
       defaultRankId: null,
-      licenseRequiredOnRegister: false,
+      emailPolicy: "required",
+      licensePolicy: "optional",
     },
   });
 
@@ -277,14 +388,20 @@ test("refresh token replay is rejected", async () => {
       accessTokenTtlSeconds: 900,
       refreshTokenTtlSeconds: 1200,
       defaultRankId: null,
-      licenseRequiredOnRegister: false,
+      emailPolicy: "required",
+      licensePolicy: "optional",
     },
   });
   prismaMock.data.endUsers.push({
     id: "user-refresh",
     applicationId: "app-refresh",
+    username: "user-refresh",
+    usernameNormalized: "user-refresh",
     email: "user-refresh@example.com",
+    passwordHash: hashPassword("password123"),
     rankId: null,
+    rankExpiresAt: null,
+    rankSourceLicenseId: null,
   });
   const refreshToken = "refresh-token";
   prismaMock.data.refreshTokens.push({
@@ -338,7 +455,8 @@ test("disabled application blocks /v1 access", async () => {
       accessTokenTtlSeconds: 900,
       refreshTokenTtlSeconds: 1200,
       defaultRankId: null,
-      licenseRequiredOnRegister: false,
+      emailPolicy: "required",
+      licensePolicy: "optional",
     },
   });
 
@@ -432,5 +550,198 @@ test("end-user tokens cannot access dashboard routes", async () => {
   });
 
   assert.equal(response.statusCode, 401);
+  await app.close();
+});
+
+test("register succeeds with username/password when policies are optional", async () => {
+  prismaMock.reset();
+  const apiKey = "register-optional-key";
+  prismaMock.data.apiKeys.push({
+    id: "key-optional",
+    keyHash: hashToken(apiKey),
+    revokedAt: null,
+    application: {
+      id: "app-optional",
+      status: "active",
+      accessTokenTtlSeconds: 900,
+      refreshTokenTtlSeconds: 1200,
+      defaultRankId: null,
+      emailPolicy: "optional",
+      licensePolicy: "optional",
+    },
+  });
+
+  const app = await buildApp();
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/auth/register",
+    headers: {
+      "x-api-key": apiKey,
+    },
+    payload: {
+      username: "NewUser",
+      password: "password123",
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(prismaMock.data.endUsers.length, 1);
+  assert.equal(prismaMock.data.endUsers[0].email, null);
+  await app.close();
+});
+
+test("register fails when email is required and missing", async () => {
+  prismaMock.reset();
+  const apiKey = "register-email-required";
+  prismaMock.data.apiKeys.push({
+    id: "key-email-required",
+    keyHash: hashToken(apiKey),
+    revokedAt: null,
+    application: {
+      id: "app-email-required",
+      status: "active",
+      accessTokenTtlSeconds: 900,
+      refreshTokenTtlSeconds: 1200,
+      defaultRankId: null,
+      emailPolicy: "required",
+      licensePolicy: "optional",
+    },
+  });
+
+  const app = await buildApp();
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/auth/register",
+    headers: {
+      "x-api-key": apiKey,
+    },
+    payload: {
+      username: "NoEmailUser",
+      password: "password123",
+    },
+  });
+
+  assert.equal(response.statusCode, 400);
+  const payload = response.json();
+  assert.equal(payload.error?.code, "email_required");
+  await app.close();
+});
+
+test("license redemption sets rank expiry", async () => {
+  prismaMock.reset();
+  const apiKey = "register-license-key";
+  const licenseCode = "license-code-123";
+  prismaMock.data.apiKeys.push({
+    id: "key-license",
+    keyHash: hashToken(apiKey),
+    revokedAt: null,
+    application: {
+      id: "app-license",
+      status: "active",
+      accessTokenTtlSeconds: 900,
+      refreshTokenTtlSeconds: 1200,
+      defaultRankId: null,
+      emailPolicy: "optional",
+      licensePolicy: "optional",
+    },
+  });
+  prismaMock.data.licenses.push({
+    id: "license-1",
+    applicationId: "app-license",
+    rankId: "rank-premium",
+    codeHash: hashToken(licenseCode),
+    status: "active",
+    maxUses: null,
+    useCount: 0,
+    durationSeconds: 3600,
+    expiresAt: null,
+    redeemedAt: null,
+    redeemedById: null,
+    revokedAt: null,
+  });
+
+  const app = await buildApp();
+  const before = Date.now();
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/auth/register",
+    headers: {
+      "x-api-key": apiKey,
+    },
+    payload: {
+      username: "LicensedUser",
+      password: "password123",
+      licenseCode,
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const endUser = prismaMock.data.endUsers[0];
+  assert.equal(endUser.rankId, "rank-premium");
+  assert.ok(endUser.rankExpiresAt instanceof Date);
+  if (endUser.rankExpiresAt) {
+    assert.ok(endUser.rankExpiresAt.getTime() >= before + 3500 * 1000);
+  }
+  await app.close();
+});
+
+test("expired rank is reverted on /v1/me", async () => {
+  prismaMock.reset();
+  const apiKey = "rank-expired-key";
+  prismaMock.data.apiKeys.push({
+    id: "key-expired",
+    keyHash: hashToken(apiKey),
+    revokedAt: null,
+    application: {
+      id: "app-expired",
+      status: "active",
+      accessTokenTtlSeconds: 900,
+      refreshTokenTtlSeconds: 1200,
+      defaultRankId: "rank-default",
+      emailPolicy: "required",
+      licensePolicy: "optional",
+    },
+  });
+  prismaMock.data.endUsers.push({
+    id: "user-expired",
+    applicationId: "app-expired",
+    username: "expired-user",
+    usernameNormalized: "expired-user",
+    email: "expired@example.com",
+    passwordHash: hashPassword("password123"),
+    rankId: "rank-premium",
+    rankExpiresAt: new Date(Date.now() - 60_000),
+    rankSourceLicenseId: "license-expired",
+  });
+
+  const token = signAccessToken(
+    {
+      sub: "user-expired",
+      appId: "app-expired",
+      rankId: "rank-premium",
+      permissions: [],
+    },
+    900,
+  );
+
+  const app = await buildApp();
+  const response = await app.inject({
+    method: "GET",
+    url: "/v1/me",
+    headers: {
+      "x-api-key": apiKey,
+      authorization: `Bearer ${token}`,
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const payload = response.json();
+  assert.equal(payload.data.rank_id, "rank-default");
+  const updatedUser = prismaMock.data.endUsers.find(
+    (user) => user.id === "user-expired",
+  );
+  assert.equal(updatedUser?.rankId, "rank-default");
+  assert.equal(updatedUser?.rankExpiresAt ?? null, null);
+  assert.equal(updatedUser?.rankSourceLicenseId ?? null, null);
   await app.close();
 });

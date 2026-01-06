@@ -65,6 +65,7 @@ const createLicenseRecord = async (data: {
   rankId: string;
   poolId?: string | null;
   maxUses?: number | null;
+  durationSeconds?: number | null;
   expiresAt?: Date | null;
 }): Promise<{ license: License; plaintextKey: string }> => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -78,6 +79,7 @@ const createLicenseRecord = async (data: {
           poolId: data.poolId ?? null,
           codeHash,
           maxUses: data.maxUses ?? null,
+          durationSeconds: data.durationSeconds ?? null,
           expiresAt: data.expiresAt ?? null,
         },
       });
@@ -115,6 +117,7 @@ export const LicenseService = {
     rankId: string,
     poolId?: string,
     maxUses?: number,
+    durationSeconds?: number,
     expiresAt?: Date,
   ): Promise<{ license: License; plaintextKey: string }> {
     const application = await ensureApplication(appId);
@@ -131,6 +134,7 @@ export const LicenseService = {
       rankId,
       poolId,
       maxUses,
+      durationSeconds,
       expiresAt,
     });
 
@@ -151,6 +155,7 @@ export const LicenseService = {
     count: number,
     poolId?: string,
     maxUses?: number,
+    durationSeconds?: number,
     expiresAt?: Date,
   ): Promise<{ licenses: License[]; plaintextKeys: string[] }> {
     if (count <= 0) {
@@ -175,6 +180,7 @@ export const LicenseService = {
         rankId,
         poolId,
         maxUses,
+        durationSeconds,
         expiresAt,
       });
       licenses.push(license);

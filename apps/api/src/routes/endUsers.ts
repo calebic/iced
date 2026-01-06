@@ -63,7 +63,17 @@ export const registerEndUserRoutes = async (
       const where = {
         applicationId: appId,
         ...(parsed.data.search
-          ? { email: { contains: parsed.data.search, mode: "insensitive" } }
+          ? {
+              OR: [
+                { email: { contains: parsed.data.search, mode: "insensitive" } },
+                {
+                  username: {
+                    contains: parsed.data.search,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            }
           : {}),
       };
 
@@ -81,6 +91,7 @@ export const registerEndUserRoutes = async (
         successResponse({
           items: users.map((user) => ({
             id: user.id,
+            username: user.username,
             email: user.email,
             status: user.status,
             rank_id: user.rankId,
@@ -188,6 +199,7 @@ export const registerEndUserRoutes = async (
         successResponse({
           user: {
             id: user.id,
+            username: user.username,
             email: user.email,
             status: user.status,
             rank_id: user.rankId,

@@ -18,11 +18,14 @@ type Application = {
   name: string;
   status: string;
   created_at: string;
+  email_policy: "required" | "optional" | "disabled";
+  license_policy: "required" | "optional" | "disabled";
 };
 
 type User = {
   id: string;
-  email: string;
+  username: string;
+  email: string | null;
   rank_id: string | null;
   status: "active" | "disabled";
   created_at: string;
@@ -53,6 +56,41 @@ const HomePage = () => {
   const [appName, setAppName] = useState("");
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [usersByApp, setUsersByApp] = useState<Record<string, UsersState>>({});
+
+  const updateRegistrationPolicies = async (
+    appId: string,
+    updates: Partial<Pick<Application, "email_policy" | "license_policy">>,
+  ) => {
+    setError("");
+    try {
+      const response = await fetch(`/dashboard/apps/${appId}/settings`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        setError("Unable to update application settings. Please try again.");
+        return;
+      }
+
+      setApps((prev) =>
+        prev.map((app) =>
+          app.id === appId
+            ? {
+                ...app,
+                ...updates,
+              }
+            : app,
+        ),
+      );
+    } catch {
+      setError("Unable to update application settings. Please try again.");
+    }
+  };
 
   const loadApps = async () => {
     setError("");
@@ -458,6 +496,7 @@ const HomePage = () => {
                             <table className="w-full text-left text-sm text-slate-200">
                               <thead className="text-xs uppercase text-slate-500">
                                 <tr>
+                                  <th className="py-2">Username</th>
                                   <th className="py-2">Email</th>
                                   <th className="py-2">Rank</th>
                                   <th className="py-2">Status</th>
@@ -469,7 +508,8 @@ const HomePage = () => {
                               <tbody className="divide-y divide-slate-800">
                                 {usersState.items.map((user) => (
                                   <tr key={user.id} className="align-top">
-                                    <td className="py-3">{user.email}</td>
+                                    <td className="py-3">{user.username}</td>
+                                    <td className="py-3">{user.email ?? "—"}</td>
                                     <td className="py-3">
                                       <select
                                         className="h-9 rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
@@ -523,6 +563,65 @@ const HomePage = () => {
                             </table>
                           </div>
                         )}
+                      </div>
+                      <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+                        <h3 className="text-sm font-semibold text-slate-100">
+                          Registration requirements
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-400">
+                          Configure which fields are required when end users
+                          register through the public API.
+                        </p>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor={`email-policy-${app.id}`}>
+                              Email policy
+                            </Label>
+                            <select
+                              id={`email-policy-${app.id}`}
+                              className="h-9 w-full rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
+                              value={app.email_policy}
+                              onChange={(event) =>
+                                updateRegistrationPolicies(app.id, {
+                                  email_policy: event.target
+                                    .value as Application["email_policy"],
+                                })
+                              }
+                            >
+                              <option value="required">Required</option>
+                              <option value="optional">Optional</option>
+                              <option value="disabled">Disabled</option>
+                            </select>
+                            <p className="text-xs text-slate-400">
+                              Required forces end users to provide email.
+                              Disabled rejects email on registration.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`license-policy-${app.id}`}>
+                              License policy
+                            </Label>
+                            <select
+                              id={`license-policy-${app.id}`}
+                              className="h-9 w-full rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
+                              value={app.license_policy}
+                              onChange={(event) =>
+                                updateRegistrationPolicies(app.id, {
+                                  license_policy: event.target
+                                    .value as Application["license_policy"],
+                                })
+                              }
+                            >
+                              <option value="required">Required</option>
+                              <option value="optional">Optional</option>
+                              <option value="disabled">Disabled</option>
+                            </select>
+                            <p className="text-xs text-slate-400">
+                              Required forces a license code during registration.
+                              Disabled rejects license codes on sign up.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
