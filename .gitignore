@@ -1,1 +1,13 @@
+# env
+.env
+.env.*
+apps/**/.env
+apps/**/.env.*
 
+# next build
+.next/
+**/.next/
+
+# build output
+dist/
+**/dist/
