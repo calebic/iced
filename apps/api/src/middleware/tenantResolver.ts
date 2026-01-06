@@ -3,6 +3,7 @@ import { errorResponse } from "@iced/shared";
 import { env } from "../env";
 import { prisma } from "../prisma";
 import { hashToken } from "../utils/crypto";
+import { constantTimeEqual } from "../services/apiKeyService";
 import { writeEventLog } from "../eventLog";
 
 export const requireTenant = async (
@@ -30,7 +31,7 @@ export const requireTenant = async (
     },
   });
 
-  if (!apiKey) {
+  if (!apiKey || !constantTimeEqual(apiKey.keyHash, keyHash)) {
     reply.code(401).send(errorResponse("unauthorized", "Invalid API key."));
     return;
   }
@@ -44,6 +45,16 @@ export const requireTenant = async (
 
   request.tenantApplication = apiKey.application;
   request.tenantApiKeyId = apiKey.id;
+
+  if (
+    !apiKey.lastUsedAt ||
+    Date.now() - apiKey.lastUsedAt.getTime() > 60_000
+  ) {
+    await prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: { lastUsedAt: new Date() },
+    });
+  }
 
   await writeEventLog({
     appId: apiKey.applicationId,

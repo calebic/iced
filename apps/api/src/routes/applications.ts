@@ -1,11 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { errorResponse, successResponse } from "@iced/shared";
 import { prisma } from "../prisma";
 import { requireDeveloperSession } from "../middleware/developerAuth";
-import { hashToken } from "../utils/crypto";
 import { writeAuditLog } from "../audit";
+import { ApiKeyService } from "../services/apiKeyService";
 
 const CreateAppSchema = z.object({
   name: z.string().min(1),
@@ -25,27 +24,6 @@ const UpdateSettingsSchema = z.object({
   license_policy: z.enum(["required", "optional", "disabled"]).optional(),
   default_rank_id: z.string().uuid().nullable().optional(),
 });
-
-const generateApiKey = (): string => randomBytes(32).toString("hex");
-
-const createApiKey = async (applicationId: string) => {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const rawKey = generateApiKey();
-    const keyHash = hashToken(rawKey);
-    try {
-      const apiKey = await prisma.apiKey.create({
-        data: {
-          applicationId,
-          keyHash,
-        },
-      });
-      return { apiKey, rawKey };
-    } catch (error) {
-      if (attempt >= 4) throw error;
-    }
-  }
-  throw new Error("Unable to generate API key.");
-};
 
 export const registerApplicationRoutes = async (
   app: FastifyInstance,
@@ -92,6 +70,8 @@ export const registerApplicationRoutes = async (
           defaultRankId: payload.default_rank_id ?? null,
         },
       });
+
+      await ApiKeyService.ensureActiveKey(application.id);
 
       await writeAuditLog({
         actorType: "developer",
@@ -262,7 +242,7 @@ export const registerApplicationRoutes = async (
       );
     });
 
-    router.post("/apps/:appId/api-keys", async (request, reply) => {
+    router.get("/apps/:appId/api-key", async (request, reply) => {
       if (!request.developerUser) {
         reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
         return;
@@ -271,83 +251,51 @@ export const registerApplicationRoutes = async (
       const { appId } = z
         .object({ appId: z.string().uuid() })
         .parse(request.params);
-      const application = await prisma.application.findFirst({
-        where: {
-          id: appId,
-          developerUserId: request.developerUser.id,
-        },
-      });
+      await ensureDeveloperApp(appId, request.developerUser.id);
 
-      if (!application) {
-        reply.code(404).send(errorResponse("not_found", "Application not found."));
-        return;
-      }
-
-      const { apiKey, rawKey } = await createApiKey(application.id);
-
-      await writeAuditLog({
-        actorType: "developer",
-        actorId: request.developerUser.id,
-        action: "app.api_key.create",
-        appId: application.id,
-        metadata: {
-          api_key_id: apiKey.id,
-        },
-      });
+      const { apiKey, masked } = await ApiKeyService.ensureActiveKey(appId);
 
       reply.send(
         successResponse({
           id: apiKey.id,
-          key: rawKey,
+          masked,
           created_at: apiKey.createdAt,
+          last_used_at: apiKey.lastUsedAt,
         }),
       );
     });
 
-    router.post("/apps/:appId/api-keys/:keyId/revoke", async (request, reply) => {
+    router.post("/apps/:appId/api-key/rotate", async (request, reply) => {
       if (!request.developerUser) {
         reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
         return;
       }
 
-      const { appId, keyId } = z
-        .object({ appId: z.string().uuid(), keyId: z.string().uuid() })
+      const { appId } = z
+        .object({ appId: z.string().uuid() })
         .parse(request.params);
-      const apiKey = await prisma.apiKey.findFirst({
-        where: {
-          id: keyId,
-          applicationId: appId,
-          application: {
-            developerUserId: request.developerUser.id,
-          },
-        },
-      });
+      await ensureDeveloperApp(appId, request.developerUser.id);
 
-      if (!apiKey) {
-        reply.code(404).send(errorResponse("not_found", "API key not found."));
-        return;
-      }
-
-      await prisma.apiKey.update({
-        where: {
-          id: apiKey.id,
-        },
-        data: {
-          revokedAt: new Date(),
-        },
-      });
+      const rotated = await ApiKeyService.rotateKey(appId);
 
       await writeAuditLog({
         actorType: "developer",
         actorId: request.developerUser.id,
-        action: "app.api_key.revoke",
-        appId: appId,
+        action: "app.api_key.rotate",
+        appId,
         metadata: {
-          api_key_id: apiKey.id,
+          api_key_id: rotated.apiKey.id,
         },
       });
 
-      reply.send(successResponse({}));
+      reply.send(
+        successResponse({
+          id: rotated.apiKey.id,
+          plaintext: rotated.plaintext,
+          masked: rotated.masked,
+          created_at: rotated.apiKey.createdAt,
+        }),
+      );
     });
   });
 };

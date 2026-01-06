@@ -46,6 +46,21 @@ type UsersState = {
   ranks: Rank[];
 };
 
+type ApiKeyData = {
+  id: string;
+  masked: string;
+  created_at: string;
+  last_used_at: string | null;
+  plaintext?: string;
+};
+
+type ApiKeyState = {
+  data?: ApiKeyData;
+  isLoading: boolean;
+  error: string;
+  isRevealed: boolean;
+};
+
 const HomePage = () => {
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>([]);
@@ -57,6 +72,7 @@ const HomePage = () => {
   const [appName, setAppName] = useState("");
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [usersByApp, setUsersByApp] = useState<Record<string, UsersState>>({});
+  const [apiKeysByApp, setApiKeysByApp] = useState<Record<string, ApiKeyState>>({});
 
   const updateRegistrationPolicies = async (
     appId: string,
@@ -210,7 +226,80 @@ const HomePage = () => {
       }
     };
 
+    const loadApiKey = async () => {
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [expandedAppId]: {
+          data: prev[expandedAppId]?.data,
+          isLoading: true,
+          error: "",
+          isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+        },
+      }));
+
+      try {
+        const response = await fetch(
+          `/dashboard/apps/${expandedAppId}/api-key`,
+          {
+            credentials: "include",
+          },
+        );
+
+        if (!response.ok) {
+          setApiKeysByApp((prev) => ({
+            ...prev,
+            [expandedAppId]: {
+              data: prev[expandedAppId]?.data,
+              isLoading: false,
+              error: "Unable to load API credentials. Please try again.",
+              isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+            },
+          }));
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: ApiKeyData;
+        };
+
+        if (!payload.success || !payload.data) {
+          setApiKeysByApp((prev) => ({
+            ...prev,
+            [expandedAppId]: {
+              data: prev[expandedAppId]?.data,
+              isLoading: false,
+              error: "Unable to load API credentials. Please try again.",
+              isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+            },
+          }));
+          return;
+        }
+
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            data: payload.data,
+            isLoading: false,
+            error: "",
+            isRevealed: false,
+          },
+        }));
+      } catch {
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            data: prev[expandedAppId]?.data,
+            isLoading: false,
+            error: "Unable to load API credentials. Please try again.",
+            isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+          },
+        }));
+      }
+    };
+
     void loadUsers();
+    void loadApiKey();
   }, [expandedAppId, usersByApp]);
 
   const updateUser = async (
@@ -319,6 +408,108 @@ const HomePage = () => {
               error: "Unable to update the user. Please try again.",
               emptyMessage: "",
             },
+      }));
+    }
+  };
+
+  const toggleApiKeyVisibility = (appId: string) => {
+    setApiKeysByApp((prev) => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        isRevealed: !(prev[appId]?.isRevealed ?? false),
+      },
+    }));
+  };
+
+  const copyApiKey = async (appId: string) => {
+    const apiKey = apiKeysByApp[appId]?.data?.plaintext;
+    if (!apiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(apiKey);
+    } catch {
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          error: "Unable to copy the API key. Please copy manually.",
+        },
+      }));
+    }
+  };
+
+  const rotateApiKey = async (appId: string) => {
+    const confirmRotation = window.confirm(
+      "Regenerate API key? The existing key will be revoked immediately.",
+    );
+    if (!confirmRotation) return;
+
+    setApiKeysByApp((prev) => ({
+      ...prev,
+      [appId]: {
+        data: prev[appId]?.data,
+        isLoading: true,
+        error: "",
+        isRevealed: true,
+      },
+    }));
+
+    try {
+      const response = await fetch(`/dashboard/apps/${appId}/api-key/rotate`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            data: prev[appId]?.data,
+            isLoading: false,
+            error: "Unable to rotate API key. Please try again.",
+            isRevealed: prev[appId]?.isRevealed ?? false,
+          },
+        }));
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: ApiKeyData & { plaintext: string };
+      };
+
+      if (!payload.success || !payload.data) {
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            data: prev[appId]?.data,
+            isLoading: false,
+            error: "Unable to rotate API key. Please try again.",
+            isRevealed: prev[appId]?.isRevealed ?? false,
+          },
+        }));
+        return;
+      }
+
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          data: payload.data,
+          isLoading: false,
+          error: "",
+          isRevealed: true,
+        },
+      }));
+    } catch {
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          data: prev[appId]?.data,
+          isLoading: false,
+          error: "Unable to rotate API key. Please try again.",
+          isRevealed: prev[appId]?.isRevealed ?? false,
+        },
       }));
     }
   };
@@ -452,6 +643,7 @@ const HomePage = () => {
               const isExpanded = expandedAppId === app.id;
 
               const usersState = usersByApp[app.id];
+              const apiKeyState = apiKeysByApp[app.id];
 
               return (
                 <Card key={app.id}>
@@ -484,6 +676,64 @@ const HomePage = () => {
                           : "max-h-0 opacity-0"
                       }`}
                     >
+                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                          API Credentials
+                        </h3>
+                        <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
+                          Use this key in your app to authenticate public API requests.
+                        </p>
+                        {apiKeyState?.error ? (
+                          <p className="mt-2 text-sm text-rose-400" role="alert">
+                            {apiKeyState.error}
+                          </p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <div className="min-w-[220px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-3 py-2 text-sm font-mono text-[var(--theme-input-text)]">
+                            {apiKeyState?.isLoading
+                              ? "Loading…"
+                              : apiKeyState?.isRevealed && apiKeyState.data?.plaintext
+                                ? apiKeyState.data.plaintext
+                                : apiKeyState?.data?.masked ?? "—"}
+                          </div>
+                          <Button
+                            type="button"
+                            className="w-auto px-4"
+                            disabled={!apiKeyState?.data?.plaintext}
+                            onClick={() => toggleApiKeyVisibility(app.id)}
+                          >
+                            {apiKeyState?.isRevealed ? "Hide" : "Show"}
+                          </Button>
+                          <Button
+                            type="button"
+                            className="w-auto px-4"
+                            disabled={!apiKeyState?.data?.plaintext}
+                            onClick={() => copyApiKey(app.id)}
+                          >
+                            Copy
+                          </Button>
+                          <Button
+                            type="button"
+                            className="w-auto px-4"
+                            onClick={() => rotateApiKey(app.id)}
+                            disabled={apiKeyState?.isLoading}
+                          >
+                            Regenerate
+                          </Button>
+                        </div>
+                        {apiKeyState?.data ? (
+                          <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
+                            Created {formatDate(apiKeyState.data.created_at)}
+                            {apiKeyState.data.last_used_at
+                              ? ` • Last used ${formatDate(apiKeyState.data.last_used_at)}`
+                              : " • Never used"}
+                          </p>
+                        ) : null}
+                        <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
+                          Regenerating revokes the existing key immediately. Store the
+                          new key somewhere safe.
+                        </p>
+                      </div>
                       <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
                         <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
                           Users
