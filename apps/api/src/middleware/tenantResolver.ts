@@ -47,12 +47,12 @@ export const requireTenant = async (
   request.tenantApiKeyId = apiKey.id;
 
   if (
-    !apiKey.lastUsedAt ||
-    Date.now() - apiKey.lastUsedAt.getTime() > 60_000
+    !apiKey.apiKeyLastUsedAt ||
+    Date.now() - apiKey.apiKeyLastUsedAt.getTime() > 60_000
   ) {
     await prisma.apiKey.update({
       where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
+      data: { apiKeyLastUsedAt: new Date() },
     });
   }
 

@@ -285,8 +285,12 @@ export const registerApplicationRoutes = async (
         successResponse({
           hasKey: true,
           last4,
-          createdAt: apiKey.createdAt.toISOString(),
-          lastUsedAt: apiKey.lastUsedAt ? apiKey.lastUsedAt.toISOString() : null,
+          createdAt: apiKey.apiKeyCreatedAt
+            ? apiKey.apiKeyCreatedAt.toISOString()
+            : null,
+          lastUsedAt: apiKey.apiKeyLastUsedAt
+            ? apiKey.apiKeyLastUsedAt.toISOString()
+            : null,
         }),
       );
     });

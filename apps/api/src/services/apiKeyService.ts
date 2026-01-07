@@ -20,11 +20,13 @@ export const ApiKeyService = {
     const rawKey = generateApiKey();
     const keyHash = hashToken(rawKey);
     const last4 = rawKey.slice(-4);
+    const now = new Date();
     const apiKey = await prisma.apiKey.create({
       data: {
         applicationId,
         keyHash,
-        last4,
+        apiKeyLast4: last4,
+        apiKeyCreatedAt: now,
       },
     });
 
@@ -47,11 +49,17 @@ export const ApiKeyService = {
   async ensureActiveKey(applicationId: string) {
     const existing = await this.getActiveKey(applicationId);
     if (existing) {
-      if (!existing.last4) {
+      if (!existing.apiKeyCreatedAt) {
+        await prisma.apiKey.update({
+          where: { id: existing.id },
+          data: { apiKeyCreatedAt: existing.createdAt },
+        });
+      }
+      if (!existing.apiKeyLast4) {
         const fallbackLast4 = existing.keyHash.slice(-4);
         const updated = await prisma.apiKey.update({
           where: { id: existing.id },
-          data: { last4: fallbackLast4 },
+          data: { apiKeyLast4: fallbackLast4 },
         });
         return {
           apiKey: updated,
@@ -60,7 +68,7 @@ export const ApiKeyService = {
       }
       return {
         apiKey: existing,
-        last4: existing.last4,
+        last4: existing.apiKeyLast4,
       };
     }
 
