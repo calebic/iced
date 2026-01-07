@@ -184,6 +184,9 @@ model EndUser {
   rankExpiresAt DateTime?            @map("rank_expires_at")
   rankSourceLicenseId String?        @map("rank_source_license_id") @db.Uuid
   status       EndUserStatus         @default(active)
+  bannedUntil  DateTime?             @map("banned_until")
+  banReason    String?               @map("ban_reason")
+  bannedAt     DateTime?             @map("banned_at")
   createdAt    DateTime              @default(now()) @map("created_at")
   updatedAt    DateTime              @updatedAt @map("updated_at")
   lastLoginAt  DateTime?             @map("last_login_at")

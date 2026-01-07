@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { errorResponse, successResponse } from "@iced/shared";
 import { prisma } from "../prisma";
@@ -32,6 +32,24 @@ const RefreshSchema = z.object({
 const LogoutSchema = RefreshSchema;
 
 const rateLimitConfig = { max: 10, timeWindow: "1 minute" };
+
+const getBanPayload = (bannedUntil: Date) => ({
+  error: "USER_BANNED",
+  banned_until: bannedUntil.toISOString(),
+  message: `User is banned until ${bannedUntil.toISOString()}`,
+});
+
+const ensureUserNotBanned = (params: {
+  bannedUntil?: Date | null;
+  reply: FastifyReply;
+}): boolean => {
+  const { bannedUntil, reply } = params;
+  if (bannedUntil && bannedUntil > new Date()) {
+    reply.code(403).send(getBanPayload(bannedUntil));
+    return false;
+  }
+  return true;
+};
 
 const loadPermissions = async (rankId?: string | null): Promise<string[]> => {
   if (!rankId) return [];
@@ -370,6 +388,15 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           return;
         }
 
+        if (
+          !ensureUserNotBanned({
+            bannedUntil: endUser.bannedUntil,
+            reply,
+          })
+        ) {
+          return;
+        }
+
         const expiryResult = await applyRankExpiry({
           endUserId: endUser.id,
           rankId: endUser.rankId ?? null,
@@ -474,6 +501,15 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
           reply
             .code(401)
             .send(errorResponse("unauthorized", "Invalid refresh token."));
+          return;
+        }
+
+        if (
+          !ensureUserNotBanned({
+            bannedUntil: endUser.bannedUntil,
+            reply,
+          })
+        ) {
           return;
         }
 
@@ -629,6 +665,15 @@ export const registerV1Routes = async (app: FastifyInstance): Promise<void> => {
 
         if (!endUser || endUser.applicationId !== appTenant.id) {
           reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
+          return;
+        }
+
+        if (
+          !ensureUserNotBanned({
+            bannedUntil: endUser.bannedUntil,
+            reply,
+          })
+        ) {
           return;
         }
 

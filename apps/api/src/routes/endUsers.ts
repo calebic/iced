@@ -17,8 +17,24 @@ const UpdateUserSchema = z.object({
   rank_id: z.string().uuid().nullable().optional(),
 });
 
+const BanUserSchema = z
+  .object({
+    duration_seconds: z.number().int().positive().optional(),
+    banned_until: z.string().datetime().optional(),
+    permanent: z.boolean().optional(),
+    reason: z.string().trim().min(1).optional(),
+    revoke_sessions: z.boolean().optional(),
+  })
+  .refine(
+    (data) => data.permanent || data.banned_until || data.duration_seconds,
+    {
+      message: "Ban duration required.",
+    },
+  );
+
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 50;
+const PERMANENT_BAN_UNTIL = new Date("9999-12-31T00:00:00Z");
 
 const ensureDeveloperApp = async (appId: string, developerId: string) => {
   const application = await prisma.application.findFirst({
@@ -97,6 +113,9 @@ export const registerEndUserRoutes = async (
             rank_id: user.rankId,
             created_at: user.createdAt,
             last_login_at: user.lastLoginAt,
+            banned_until: user.bannedUntil,
+            ban_reason: user.banReason,
+            banned_at: user.bannedAt,
           })),
           page,
           pageSize,
@@ -205,6 +224,170 @@ export const registerEndUserRoutes = async (
             rank_id: user.rankId,
             created_at: user.createdAt,
             last_login_at: user.lastLoginAt,
+            banned_until: user.bannedUntil,
+            ban_reason: user.banReason,
+            banned_at: user.bannedAt,
+          },
+        }),
+      );
+    });
+
+    router.post("/apps/:appId/users/:userId/ban", async (request, reply) => {
+      const parsed = BanUserSchema.safeParse(request.body);
+      if (!parsed.success) {
+        reply
+          .code(400)
+          .send(errorResponse("invalid_request", "Invalid ban payload."));
+        return;
+      }
+
+      if (!request.developerUser) {
+        reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
+        return;
+      }
+
+      const { appId, userId } = request.params as {
+        appId: string;
+        userId: string;
+      };
+
+      await ensureDeveloperApp(appId, request.developerUser.id);
+
+      const endUser = await prisma.endUser.findFirst({
+        where: { id: userId, applicationId: appId },
+      });
+
+      if (!endUser) {
+        reply.code(404).send(errorResponse("not_found", "User not found."));
+        return;
+      }
+
+      const now = new Date();
+      const bannedUntil = parsed.data.permanent
+        ? PERMANENT_BAN_UNTIL
+        : parsed.data.banned_until
+          ? new Date(parsed.data.banned_until)
+          : new Date(now.getTime() + parsed.data.duration_seconds! * 1000);
+
+      const updatedUser = await prisma.endUser.update({
+        where: { id: endUser.id },
+        data: {
+          bannedUntil,
+          bannedAt: now,
+          banReason: parsed.data.reason ?? null,
+        },
+      });
+
+      if (parsed.data.revoke_sessions) {
+        await prisma.endUserRefreshToken.updateMany({
+          where: { endUserId: endUser.id, revokedAt: null },
+          data: { revokedAt: now },
+        });
+      }
+
+      await writeAuditLog({
+        actorType: "developer",
+        actorId: request.developerUser.id,
+        action: "end_user.ban",
+        appId,
+        metadata: {
+          endUserId: endUser.id,
+          bannedUntil: updatedUser.bannedUntil?.toISOString(),
+          banReason: updatedUser.banReason,
+          revokeSessions: parsed.data.revoke_sessions ?? false,
+        },
+      });
+
+      await writeEventLog({
+        appId,
+        eventType: "end_user.banned",
+        request,
+        statusCode: reply.statusCode,
+        metadata: {
+          endUserId: endUser.id,
+          bannedUntil: updatedUser.bannedUntil?.toISOString(),
+          banReason: updatedUser.banReason,
+        },
+      });
+
+      reply.send(
+        successResponse({
+          user: {
+            id: updatedUser.id,
+            username: updatedUser.username,
+            email: updatedUser.email,
+            status: updatedUser.status,
+            rank_id: updatedUser.rankId,
+            created_at: updatedUser.createdAt,
+            last_login_at: updatedUser.lastLoginAt,
+            banned_until: updatedUser.bannedUntil,
+            ban_reason: updatedUser.banReason,
+            banned_at: updatedUser.bannedAt,
+          },
+        }),
+      );
+    });
+
+    router.post("/apps/:appId/users/:userId/unban", async (request, reply) => {
+      if (!request.developerUser) {
+        reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
+        return;
+      }
+
+      const { appId, userId } = request.params as {
+        appId: string;
+        userId: string;
+      };
+
+      await ensureDeveloperApp(appId, request.developerUser.id);
+
+      const endUser = await prisma.endUser.findFirst({
+        where: { id: userId, applicationId: appId },
+      });
+
+      if (!endUser) {
+        reply.code(404).send(errorResponse("not_found", "User not found."));
+        return;
+      }
+
+      const updatedUser = await prisma.endUser.update({
+        where: { id: endUser.id },
+        data: {
+          bannedUntil: null,
+          bannedAt: null,
+          banReason: null,
+        },
+      });
+
+      await writeAuditLog({
+        actorType: "developer",
+        actorId: request.developerUser.id,
+        action: "end_user.unban",
+        appId,
+        metadata: { endUserId: endUser.id },
+      });
+
+      await writeEventLog({
+        appId,
+        eventType: "end_user.unbanned",
+        request,
+        statusCode: reply.statusCode,
+        metadata: { endUserId: endUser.id },
+      });
+
+      reply.send(
+        successResponse({
+          user: {
+            id: updatedUser.id,
+            username: updatedUser.username,
+            email: updatedUser.email,
+            status: updatedUser.status,
+            rank_id: updatedUser.rankId,
+            created_at: updatedUser.createdAt,
+            last_login_at: updatedUser.lastLoginAt,
+            banned_until: updatedUser.bannedUntil,
+            ban_reason: updatedUser.banReason,
+            banned_at: updatedUser.bannedAt,
           },
         }),
       );
