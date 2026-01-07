@@ -47,15 +47,15 @@ type UsersState = {
 };
 
 type ApiKeyData = {
-  id: string;
-  masked: string;
-  created_at: string;
-  last_used_at: string | null;
-  plaintext?: string;
+  hasKey: boolean;
+  last4: string | null;
+  createdAt: string | null;
+  lastUsedAt: string | null;
 };
 
 type ApiKeyState = {
   data?: ApiKeyData;
+  rawApiKey?: string;
   isLoading: boolean;
   error: string;
   isRevealed: boolean;
@@ -231,6 +231,7 @@ const HomePage = () => {
         ...prev,
         [expandedAppId]: {
           data: prev[expandedAppId]?.data,
+          rawApiKey: prev[expandedAppId]?.rawApiKey,
           isLoading: true,
           error: "",
           isRevealed: prev[expandedAppId]?.isRevealed ?? false,
@@ -250,6 +251,7 @@ const HomePage = () => {
             ...prev,
             [expandedAppId]: {
               data: prev[expandedAppId]?.data,
+              rawApiKey: prev[expandedAppId]?.rawApiKey,
               isLoading: false,
               error: "Unable to load API credentials. Please try again.",
               isRevealed: prev[expandedAppId]?.isRevealed ?? false,
@@ -268,6 +270,7 @@ const HomePage = () => {
             ...prev,
             [expandedAppId]: {
               data: prev[expandedAppId]?.data,
+              rawApiKey: prev[expandedAppId]?.rawApiKey,
               isLoading: false,
               error: "Unable to load API credentials. Please try again.",
               isRevealed: prev[expandedAppId]?.isRevealed ?? false,
@@ -280,6 +283,7 @@ const HomePage = () => {
           ...prev,
           [expandedAppId]: {
             data: payload.data,
+            rawApiKey: undefined,
             isLoading: false,
             error: "",
             isRevealed: false,
@@ -290,6 +294,7 @@ const HomePage = () => {
           ...prev,
           [expandedAppId]: {
             data: prev[expandedAppId]?.data,
+            rawApiKey: prev[expandedAppId]?.rawApiKey,
             isLoading: false,
             error: "Unable to load API credentials. Please try again.",
             isRevealed: prev[expandedAppId]?.isRevealed ?? false,
@@ -423,9 +428,7 @@ const HomePage = () => {
   };
 
   const copyApiKey = async (appId: string) => {
-    const apiKey =
-      apiKeysByApp[appId]?.data?.plaintext ??
-      apiKeysByApp[appId]?.data?.masked;
+    const apiKey = apiKeysByApp[appId]?.rawApiKey;
     if (!apiKey) return;
 
     try {
@@ -451,6 +454,7 @@ const HomePage = () => {
       ...prev,
       [appId]: {
         data: prev[appId]?.data,
+        rawApiKey: prev[appId]?.rawApiKey,
         isLoading: true,
         error: "",
         isRevealed: true,
@@ -468,6 +472,7 @@ const HomePage = () => {
           ...prev,
           [appId]: {
             data: prev[appId]?.data,
+            rawApiKey: prev[appId]?.rawApiKey,
             isLoading: false,
             error: "Unable to rotate API key. Please try again.",
             isRevealed: prev[appId]?.isRevealed ?? false,
@@ -478,7 +483,7 @@ const HomePage = () => {
 
       const payload = (await response.json()) as {
         success: boolean;
-        data?: ApiKeyData & { plaintext: string };
+        data?: { apiKey: string; last4: string; createdAt: string };
       };
 
       if (!payload.success || !payload.data) {
@@ -486,6 +491,7 @@ const HomePage = () => {
           ...prev,
           [appId]: {
             data: prev[appId]?.data,
+            rawApiKey: prev[appId]?.rawApiKey,
             isLoading: false,
             error: "Unable to rotate API key. Please try again.",
             isRevealed: prev[appId]?.isRevealed ?? false,
@@ -497,7 +503,13 @@ const HomePage = () => {
       setApiKeysByApp((prev) => ({
         ...prev,
         [appId]: {
-          data: payload.data,
+          data: {
+            hasKey: true,
+            last4: payload.data.last4,
+            createdAt: payload.data.createdAt,
+            lastUsedAt: null,
+          },
+          rawApiKey: payload.data.apiKey,
           isLoading: false,
           error: "",
           isRevealed: true,
@@ -508,6 +520,7 @@ const HomePage = () => {
         ...prev,
         [appId]: {
           data: prev[appId]?.data,
+          rawApiKey: prev[appId]?.rawApiKey,
           isLoading: false,
           error: "Unable to rotate API key. Please try again.",
           isRevealed: prev[appId]?.isRevealed ?? false,
@@ -690,46 +703,60 @@ const HomePage = () => {
                             {apiKeyState.error}
                           </p>
                         ) : null}
+                        {apiKeyState?.rawApiKey ? (
+                          <p className="mt-2 text-xs text-amber-500">
+                            This key will not be shown again.
+                          </p>
+                        ) : null}
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <div className="min-w-[220px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-3 py-2 text-sm font-mono text-[var(--theme-input-text)]">
                             {apiKeyState?.isLoading
                               ? "Loading…"
                               : apiKeyState?.isRevealed
-                                ? apiKeyState.data?.plaintext ??
-                                  apiKeyState?.data?.masked ??
-                                  "—"
-                                : "Hidden"}
+                                ? apiKeyState.rawApiKey ??
+                                  (apiKeyState?.data?.last4
+                                    ? `••••••${apiKeyState.data.last4}`
+                                    : "••••••")
+                                : apiKeyState?.data?.last4
+                                  ? `••••••${apiKeyState.data.last4}`
+                                  : "••••••"}
                           </div>
                           <Button
                             type="button"
-                            className="h-9 w-auto px-3 text-xs"
-                            disabled={!apiKeyState?.data || apiKeyState?.isLoading}
+                            className="h-8 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-xs text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                            disabled={apiKeyState?.isLoading}
                             onClick={() => toggleApiKeyVisibility(app.id)}
                           >
                             {apiKeyState?.isRevealed ? "Hide" : "Show"}
                           </Button>
                           <Button
                             type="button"
-                            className="h-9 w-auto px-3 text-xs"
-                            disabled={!apiKeyState?.data || !apiKeyState?.isRevealed}
+                            className="h-8 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-xs text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                            disabled={
+                              apiKeyState?.isLoading ||
+                              !apiKeyState?.rawApiKey ||
+                              !apiKeyState?.isRevealed
+                            }
                             onClick={() => copyApiKey(app.id)}
                           >
                             Copy
                           </Button>
                           <Button
                             type="button"
-                            className="h-9 w-auto px-3 text-xs"
-                            onClick={() => rotateApiKey(app.id)}
                             disabled={apiKeyState?.isLoading}
+                            className="h-8 w-auto bg-rose-500 px-2 text-xs text-white hover:bg-rose-600 focus-visible:ring-rose-400"
+                            onClick={() => rotateApiKey(app.id)}
                           >
                             Regenerate
                           </Button>
                         </div>
                         {apiKeyState?.data ? (
                           <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
-                            Created {formatDate(apiKeyState.data.created_at)}
-                            {apiKeyState.data.last_used_at
-                              ? ` • Last used ${formatDate(apiKeyState.data.last_used_at)}`
+                            {apiKeyState.data.createdAt
+                              ? `Created ${formatDate(apiKeyState.data.createdAt)}`
+                              : "Created —"}
+                            {apiKeyState.data.lastUsedAt
+                              ? ` • Last used ${formatDate(apiKeyState.data.lastUsedAt)}`
                               : " • Never used"}
                           </p>
                         ) : null}

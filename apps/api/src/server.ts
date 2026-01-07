@@ -21,6 +21,7 @@ declare module "fastify" {
     developerUser?: import("./types").AuthenticatedDeveloper;
     tenantApplication?: import("./types").TenantApplication;
     tenantApiKeyId?: string;
+    app?: import("./types").TenantApplication;
   }
 }
 

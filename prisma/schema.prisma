@@ -159,6 +159,7 @@ model ApiKey {
   id            String       @id @default(uuid()) @db.Uuid
   applicationId String       @map("application_id") @db.Uuid
   keyHash       String       @unique @map("key_hash")
+  last4         String?      @map("api_key_last4")
   createdAt     DateTime     @default(now()) @map("created_at")
   revokedAt     DateTime?    @map("revoked_at")
   lastUsedAt    DateTime?    @map("last_used_at")
