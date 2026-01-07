@@ -715,236 +715,232 @@ const HomePage = () => {
                     <p className="text-sm text-[var(--theme-muted)]">
                       Created {formatDate(app.created_at)}
                     </p>
-                    <div
-                      className={`overflow-hidden transition-all duration-200 ${
-                        isExpanded
-                          ? "max-h-[500px] opacity-100"
-                          : "max-h-0 opacity-0"
-                      }`}
-                    >
-                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
-                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
-                          API Credentials
-                        </h3>
-                        <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
-                          Use this key in your app to authenticate public API requests.
-                        </p>
-                        {apiKeyState?.error ? (
-                          <p className="mt-2 text-sm text-rose-400" role="alert">
-                            {apiKeyState.error}
+                    {isExpanded ? (
+                      <div className="mt-4 space-y-4">
+                        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                          <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                            API Credentials
+                          </h3>
+                          <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
+                            Use this key in your app to authenticate public API requests.
                           </p>
-                        ) : null}
-                        {apiKeyState?.isRevealed && apiKeyState.fullKey ? (
-                          <p className="mt-2 text-xs text-amber-500">
-                            Copy this now — it won’t be shown again.
-                          </p>
-                        ) : null}
-                        {apiKeyState?.showHint ? (
-                          <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
-                            Full key is only shown once after regeneration.
-                          </p>
-                        ) : null}
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <div className="min-w-[220px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-3 py-2 text-sm font-mono text-[var(--theme-input-text)]">
-                            {apiKeyState?.isLoading
-                              ? "Loading…"
-                              : apiKeyState?.isRevealed && apiKeyState.fullKey
-                                ? apiKeyState.fullKey
-                                : apiKeyState?.maskedKey ?? "••••••"}
+                          {apiKeyState?.error ? (
+                            <p className="mt-1 text-sm text-rose-400" role="alert">
+                              {apiKeyState.error}
+                            </p>
+                          ) : null}
+                          {apiKeyState?.isRevealed && apiKeyState.fullKey ? (
+                            <p className="mt-1 text-xs text-amber-500">
+                              Copy this now — it won’t be shown again.
+                            </p>
+                          ) : null}
+                          {apiKeyState?.showHint ? (
+                            <p className="mt-1 text-xs text-[var(--theme-muted-strong)]">
+                              Full key is only shown once after regeneration.
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
+                            <div className="min-w-[220px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-3 py-2 text-sm font-mono text-[var(--theme-input-text)]">
+                              {apiKeyState?.isLoading
+                                ? "Loading…"
+                                : apiKeyState?.isRevealed && apiKeyState.fullKey
+                                  ? apiKeyState.fullKey
+                                  : apiKeyState?.maskedKey ?? "••••••"}
+                            </div>
+                            <Button
+                              type="button"
+                              className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                              disabled={apiKeyState?.isLoading}
+                              onClick={() => toggleApiKeyVisibility(app.id)}
+                            >
+                              {apiKeyState?.isRevealed ? "Hide" : "Show"}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                              disabled={
+                                apiKeyState?.isLoading ||
+                                !apiKeyState?.fullKey ||
+                                !apiKeyState?.isRevealed
+                              }
+                              onClick={() => copyApiKey(app.id)}
+                            >
+                              Copy
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={apiKeyState?.isLoading}
+                              className="h-7 w-auto bg-rose-500 px-2 text-[11px] text-white hover:bg-rose-600 focus-visible:ring-rose-400"
+                              onClick={() => rotateApiKey(app.id)}
+                            >
+                              Regenerate
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
-                            disabled={apiKeyState?.isLoading}
-                            onClick={() => toggleApiKeyVisibility(app.id)}
-                          >
-                            {apiKeyState?.isRevealed ? "Hide" : "Show"}
-                          </Button>
-                          <Button
-                            type="button"
-                            className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
-                            disabled={
-                              apiKeyState?.isLoading ||
-                              !apiKeyState?.fullKey ||
-                              !apiKeyState?.isRevealed
-                            }
-                            onClick={() => copyApiKey(app.id)}
-                          >
-                            Copy
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={apiKeyState?.isLoading}
-                            className="h-7 w-auto bg-rose-500 px-2 text-[11px] text-white hover:bg-rose-600 focus-visible:ring-rose-400"
-                            onClick={() => rotateApiKey(app.id)}
-                          >
-                            Regenerate
-                          </Button>
+                          {apiKeyState?.data ? (
+                            <p className="mt-1 text-xs text-[var(--theme-muted-strong)]">
+                              {apiKeyState.data.createdAt
+                                ? `Created ${formatDate(apiKeyState.data.createdAt)}`
+                                : "Created —"}
+                              {apiKeyState.data.lastUsedAt
+                                ? ` • Last used ${formatDate(apiKeyState.data.lastUsedAt)}`
+                                : " • Never used"}
+                            </p>
+                          ) : null}
+                          <p className="mt-1 text-xs text-[var(--theme-muted-strong)]">
+                            Regenerating revokes the existing key immediately. Store the
+                            new key somewhere safe.
+                          </p>
                         </div>
-                        {apiKeyState?.data ? (
-                          <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
-                            {apiKeyState.data.createdAt
-                              ? `Created ${formatDate(apiKeyState.data.createdAt)}`
-                              : "Created —"}
-                            {apiKeyState.data.lastUsedAt
-                              ? ` • Last used ${formatDate(apiKeyState.data.lastUsedAt)}`
-                              : " • Never used"}
-                          </p>
-                        ) : null}
-                        <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
-                          Regenerating revokes the existing key immediately. Store the
-                          new key somewhere safe.
-                        </p>
-                      </div>
-                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
-                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
-                          Users
-                        </h3>
-                        {!usersState || usersState.isLoading ? (
-                          <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
-                            Loading users…
-                          </p>
-                        ) : usersState.error ? (
-                          <p className="mt-2 text-sm text-rose-400" role="alert">
-                            {usersState.error}
-                          </p>
-                        ) : usersState.items.length === 0 ? (
-                          <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
-                            {usersState.emptyMessage}
-                          </p>
-                        ) : (
-                          <div className="mt-3 overflow-x-auto">
-                            <table className="w-full text-left text-sm text-[var(--theme-fg)]">
-                              <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
-                                <tr>
-                                  <th className="py-2">Username</th>
-                                  <th className="py-2">Email</th>
-                                  <th className="py-2">Rank</th>
-                                  <th className="py-2">Status</th>
-                                  <th className="py-2">Created</th>
-                                  <th className="py-2">Last login</th>
-                                  <th className="py-2 text-right">Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[var(--theme-border)]">
-                                {usersState.items.map((user) => (
-                                  <tr key={user.id} className="align-top">
-                                    <td className="py-3">{user.username}</td>
-                                    <td className="py-3">{user.email ?? "—"}</td>
-                                    <td className="py-3">
-                                      <select
-                                        className="h-9 rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
-                                        value={user.rank_id ?? ""}
-                                        onChange={(event) =>
-                                          updateUser(app.id, user.id, {
-                                            rank_id: event.target.value || null,
-                                          })
-                                        }
-                                      >
-                                        <option value="">No rank</option>
-                                        {usersState.ranks.map((rank) => (
-                                          <option key={rank.id} value={rank.id}>
-                                            {rank.name}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </td>
-                                    <td className="py-3 capitalize">
-                                      {user.status}
-                                    </td>
-                                    <td className="py-3">
-                                      {formatDate(user.created_at)}
-                                    </td>
-                                    <td className="py-3">
-                                      {user.last_login_at
-                                        ? formatDate(user.last_login_at)
-                                        : "—"}
-                                    </td>
-                                    <td className="py-3 text-right">
-                                      <Button
-                                        type="button"
-                                        className="h-9 w-auto px-4"
-                                        onClick={() =>
-                                          updateUser(app.id, user.id, {
-                                            status:
-                                              user.status === "active"
-                                                ? "disabled"
-                                                : "active",
-                                          })
-                                        }
-                                      >
-                                        {user.status === "active"
-                                          ? "Disable"
-                                          : "Enable"}
-                                      </Button>
-                                    </td>
+                        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                          <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                            Users
+                          </h3>
+                          {!usersState || usersState.isLoading ? (
+                            <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
+                              Loading users…
+                            </p>
+                          ) : usersState.error ? (
+                            <p className="mt-2 text-sm text-rose-400" role="alert">
+                              {usersState.error}
+                            </p>
+                          ) : usersState.items.length === 0 ? (
+                            <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
+                              {usersState.emptyMessage}
+                            </p>
+                          ) : (
+                            <div className="mt-3 overflow-x-auto">
+                              <table className="w-full text-left text-sm text-[var(--theme-fg)]">
+                                <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
+                                  <tr>
+                                    <th className="py-2">Username</th>
+                                    <th className="py-2">Email</th>
+                                    <th className="py-2">Rank</th>
+                                    <th className="py-2">Status</th>
+                                    <th className="py-2">Created</th>
+                                    <th className="py-2">Last login</th>
+                                    <th className="py-2 text-right">Actions</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
-                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
-                          Registration requirements
-                        </h3>
-                        <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
-                          Configure which fields are required when end users
-                          register through the public API.
-                        </p>
-                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor={`email-policy-${app.id}`}>
-                              Email policy
-                            </Label>
-                            <select
-                              id={`email-policy-${app.id}`}
-                              className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
-                              value={app.email_policy}
-                              onChange={(event) =>
-                                updateRegistrationPolicies(app.id, {
-                                  email_policy: event.target
-                                    .value as Application["email_policy"],
-                                })
-                              }
-                            >
-                              <option value="required">Required</option>
-                              <option value="optional">Optional</option>
-                              <option value="disabled">Disabled</option>
-                            </select>
-                            <p className="text-xs text-[var(--theme-muted-strong)]">
-                              Required forces end users to provide email.
-                              Disabled rejects email on registration.
-                            </p>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`license-policy-${app.id}`}>
-                              License policy
-                            </Label>
-                            <select
-                              id={`license-policy-${app.id}`}
-                              className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
-                              value={app.license_policy}
-                              onChange={(event) =>
-                                updateRegistrationPolicies(app.id, {
-                                  license_policy: event.target
-                                    .value as Application["license_policy"],
-                                })
-                              }
-                            >
-                              <option value="required">Required</option>
-                              <option value="optional">Optional</option>
-                              <option value="disabled">Disabled</option>
-                            </select>
-                            <p className="text-xs text-[var(--theme-muted-strong)]">
-                              Required forces a license code during registration.
-                              Disabled rejects license codes on sign up.
-                            </p>
+                                </thead>
+                                <tbody className="divide-y divide-[var(--theme-border)]">
+                                  {usersState.items.map((user) => (
+                                    <tr key={user.id} className="align-top">
+                                      <td className="py-3">{user.username}</td>
+                                      <td className="py-3">{user.email ?? "—"}</td>
+                                      <td className="py-3">
+                                        <select
+                                          className="h-9 rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                                          value={user.rank_id ?? ""}
+                                          onChange={(event) =>
+                                            updateUser(app.id, user.id, {
+                                              rank_id: event.target.value || null,
+                                            })
+                                          }
+                                        >
+                                          <option value="">No rank</option>
+                                          {usersState.ranks.map((rank) => (
+                                            <option key={rank.id} value={rank.id}>
+                                              {rank.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </td>
+                                      <td className="py-3 capitalize">
+                                        {user.status}
+                                      </td>
+                                      <td className="py-3">
+                                        {formatDate(user.created_at)}
+                                      </td>
+                                      <td className="py-3">
+                                        {user.last_login_at
+                                          ? formatDate(user.last_login_at)
+                                          : "—"}
+                                      </td>
+                                      <td className="py-3 text-right">
+                                        <Button
+                                          type="button"
+                                          className="h-9 w-auto px-4"
+                                          onClick={() =>
+                                            updateUser(app.id, user.id, {
+                                              status:
+                                                user.status === "active"
+                                                  ? "disabled"
+                                                  : "active",
+                                            })
+                                          }
+                                        >
+                                          {user.status === "active"
+                                            ? "Disable"
+                                            : "Enable"}
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                          <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                            Registration requirements
+                          </h3>
+                          <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
+                            Configure which fields are required when end users
+                            register through the public API.
+                          </p>
+                          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`email-policy-${app.id}`}>
+                                Email policy
+                              </Label>
+                              <select
+                                id={`email-policy-${app.id}`}
+                                className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                                value={app.email_policy}
+                                onChange={(event) =>
+                                  updateRegistrationPolicies(app.id, {
+                                    email_policy: event.target
+                                      .value as Application["email_policy"],
+                                  })
+                                }
+                              >
+                                <option value="required">Required</option>
+                                <option value="optional">Optional</option>
+                                <option value="disabled">Disabled</option>
+                              </select>
+                              <p className="text-xs text-[var(--theme-muted-strong)]">
+                                Required forces end users to provide email.
+                                Disabled rejects email on registration.
+                              </p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`license-policy-${app.id}`}>
+                                License policy
+                              </Label>
+                              <select
+                                id={`license-policy-${app.id}`}
+                                className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                                value={app.license_policy}
+                                onChange={(event) =>
+                                  updateRegistrationPolicies(app.id, {
+                                    license_policy: event.target
+                                      .value as Application["license_policy"],
+                                  })
+                                }
+                              >
+                                <option value="required">Required</option>
+                                <option value="optional">Optional</option>
+                                <option value="disabled">Disabled</option>
+                              </select>
+                              <p className="text-xs text-[var(--theme-muted-strong)]">
+                                Required forces a license code during registration.
+                                Disabled rejects license codes on sign up.
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
                     </div>
+                    ) : null}
                   </CardContent>
                 </Card>
               );
