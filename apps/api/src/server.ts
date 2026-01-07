@@ -26,8 +26,28 @@ declare module "fastify" {
 }
 
 export const buildServer = () => {
+  const isDev = env.NODE_ENV === "development";
+  const logLevel = (process.env.LOG_LEVEL ?? "info").toLowerCase();
+
   const app = Fastify({
-    logger: true,
+    logger: isDev
+      ? {
+          level: logLevel,
+          transport: {
+            target: "pino-pretty",
+            options: {
+              colorize: true,
+              levelFirst: true,
+              singleLine: true,
+              translateTime: false,
+              ignore: "pid,hostname,time",
+              messageFormat: "{msg}",
+            },
+          },
+        }
+      : {
+          level: logLevel,
+        },
   });
 
   app.register(cookie);
@@ -41,9 +61,53 @@ export const buildServer = () => {
     timeWindow: "1 minute",
   });
 
+  app.addHook("onResponse", async (request, reply) => {
+    const statusCode = reply.statusCode;
+    const method = request.method;
+    const route = request.routeOptions?.url ?? request.raw.url ?? request.url;
+    const responseTime = reply.getResponseTime().toFixed(1);
+
+    if (method === "GET" && statusCode >= 200 && statusCode < 300) {
+      return;
+    }
+
+    const message = `[${method}] ${route} → ${statusCode} (${responseTime} ms)`;
+    if (statusCode >= 500) {
+      request.log.error(message);
+    } else if (statusCode >= 400) {
+      request.log.warn(message);
+    } else {
+      request.log.info(message);
+    }
+  });
+
   app.setErrorHandler((error, request, reply) => {
-    request.log.error(error);
     const statusCode = error.statusCode ?? 500;
+    const route = request.routeOptions?.url ?? request.raw.url ?? request.url;
+    const prismaCode =
+      typeof (error as { code?: string }).code === "string"
+        ? (error as { code?: string }).code
+        : null;
+    const message = prismaCode
+      ? `DB ERROR (${prismaCode}): ${error.message}`
+      : error.message;
+    const logPayload = {
+      route,
+      statusCode,
+      prismaCode: prismaCode ?? undefined,
+    };
+    const includeStack = !isDev || logLevel === "debug";
+
+    if (statusCode >= 500) {
+      if (includeStack) {
+        request.log.error({ ...logPayload, err: error }, message);
+      } else {
+        request.log.error(logPayload, message);
+      }
+    } else {
+      request.log.warn(logPayload, message);
+    }
+
     reply
       .code(statusCode)
       .send(
