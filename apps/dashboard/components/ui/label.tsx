@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 const Label = ({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) => (
   <label
-    className={cn("text-sm font-medium text-slate-200", className)}
+    className={cn("text-sm font-medium text-[var(--theme-muted)]", className)}
     {...props}
   />
 );

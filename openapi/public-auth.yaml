@@ -19,7 +19,9 @@ paths:
       description: |
         Creates a new end-user account for the tenant application and returns
         access/refresh tokens. If the application requires licenses, a license
-        key must be provided.
+        code must be provided. Email and license fields follow the application
+        registration policies. When a policy is disabled, the API rejects that
+        field if it is provided.
       requestBody:
         required: true
         content:
@@ -54,6 +56,7 @@ paths:
   /v1/auth/login:
     post:
       summary: Login an end user
+      description: Provide a username or email with the password.
       requestBody:
         required: true
         content:
@@ -175,24 +178,27 @@ components:
     RegisterRequest:
       type: object
       required:
-        - email
+        - username
         - password
       properties:
-        email:
+        username:
           type: string
-          format: email
         password:
           type: string
           minLength: 8
-        license_key:
+        email:
+          type: string
+          format: email
+        licenseCode:
           type: string
           description: Required when the application enforces licenses.
     LoginRequest:
       type: object
       required:
-        - email
         - password
       properties:
+        username:
+          type: string
         email:
           type: string
           format: email
@@ -243,9 +249,12 @@ components:
           properties:
             id:
               type: string
+            username:
+              type: string
             email:
               type: string
               format: email
+              nullable: true
             rank_id:
               type: string
               nullable: true

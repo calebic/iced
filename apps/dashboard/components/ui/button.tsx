@@ -8,7 +8,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElem
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex h-11 w-full items-center justify-center rounded-md bg-white text-sm font-semibold text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-70",
+        "inline-flex h-11 w-full items-center justify-center rounded-md bg-[var(--theme-button-bg)] text-sm font-semibold text-[var(--theme-button-text)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-ring)] disabled:cursor-not-allowed disabled:opacity-70",
         className,
       )}
       {...props}

@@ -34,7 +34,8 @@ const UpdateAppSettingsSchema = z.object({
   allowed_origins: z.array(z.string()).optional(),
   access_token_ttl_seconds: z.number().int().positive().optional(),
   refresh_token_ttl_seconds: z.number().int().positive().optional(),
-  license_required_on_register: z.boolean().optional(),
+  email_policy: z.enum(["required", "optional", "disabled"]).optional(),
+  license_policy: z.enum(["required", "optional", "disabled"]).optional(),
   default_rank_id: z.string().uuid().nullable().optional(),
 });
 
@@ -519,8 +520,8 @@ export const registerOwnerRoutes = async (
               allowed_origins: appDetails.allowedOrigins,
               access_token_ttl_seconds: appDetails.accessTokenTtlSeconds,
               refresh_token_ttl_seconds: appDetails.refreshTokenTtlSeconds,
-              license_required_on_register:
-                appDetails.licenseRequiredOnRegister,
+              email_policy: appDetails.emailPolicy,
+              license_policy: appDetails.licensePolicy,
               default_rank_id: appDetails.defaultRankId,
             },
             created_at: appDetails.createdAt,
@@ -585,11 +586,11 @@ export const registerOwnerRoutes = async (
           ...(parsed.data.refresh_token_ttl_seconds
             ? { refreshTokenTtlSeconds: parsed.data.refresh_token_ttl_seconds }
             : {}),
-          ...(parsed.data.license_required_on_register !== undefined
-            ? {
-                licenseRequiredOnRegister:
-                  parsed.data.license_required_on_register,
-              }
+          ...(parsed.data.email_policy !== undefined
+            ? { emailPolicy: parsed.data.email_policy }
+            : {}),
+          ...(parsed.data.license_policy !== undefined
+            ? { licensePolicy: parsed.data.license_policy }
             : {}),
           ...(parsed.data.default_rank_id !== undefined
             ? { defaultRankId: parsed.data.default_rank_id }

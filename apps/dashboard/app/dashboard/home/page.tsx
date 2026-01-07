@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import ThemeToggle from "@/components/theme-toggle";
 
 const formatDate = (value: string | Date) =>
   new Date(value).toLocaleString(undefined, {
@@ -18,11 +19,14 @@ type Application = {
   name: string;
   status: string;
   created_at: string;
+  email_policy: "required" | "optional" | "disabled";
+  license_policy: "required" | "optional" | "disabled";
 };
 
 type User = {
   id: string;
-  email: string;
+  username: string;
+  email: string | null;
   rank_id: string | null;
   status: "active" | "disabled";
   created_at: string;
@@ -42,6 +46,21 @@ type UsersState = {
   ranks: Rank[];
 };
 
+type ApiKeyData = {
+  id: string;
+  masked: string;
+  created_at: string;
+  last_used_at: string | null;
+  plaintext?: string;
+};
+
+type ApiKeyState = {
+  data?: ApiKeyData;
+  isLoading: boolean;
+  error: string;
+  isRevealed: boolean;
+};
+
 const HomePage = () => {
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>([]);
@@ -53,6 +72,42 @@ const HomePage = () => {
   const [appName, setAppName] = useState("");
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [usersByApp, setUsersByApp] = useState<Record<string, UsersState>>({});
+  const [apiKeysByApp, setApiKeysByApp] = useState<Record<string, ApiKeyState>>({});
+
+  const updateRegistrationPolicies = async (
+    appId: string,
+    updates: Partial<Pick<Application, "email_policy" | "license_policy">>,
+  ) => {
+    setError("");
+    try {
+      const response = await fetch(`/dashboard/apps/${appId}/settings`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        setError("Unable to update application settings. Please try again.");
+        return;
+      }
+
+      setApps((prev) =>
+        prev.map((app) =>
+          app.id === appId
+            ? {
+                ...app,
+                ...updates,
+              }
+            : app,
+        ),
+      );
+    } catch {
+      setError("Unable to update application settings. Please try again.");
+    }
+  };
 
   const loadApps = async () => {
     setError("");
@@ -171,7 +226,80 @@ const HomePage = () => {
       }
     };
 
+    const loadApiKey = async () => {
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [expandedAppId]: {
+          data: prev[expandedAppId]?.data,
+          isLoading: true,
+          error: "",
+          isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+        },
+      }));
+
+      try {
+        const response = await fetch(
+          `/dashboard/apps/${expandedAppId}/api-key`,
+          {
+            credentials: "include",
+          },
+        );
+
+        if (!response.ok) {
+          setApiKeysByApp((prev) => ({
+            ...prev,
+            [expandedAppId]: {
+              data: prev[expandedAppId]?.data,
+              isLoading: false,
+              error: "Unable to load API credentials. Please try again.",
+              isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+            },
+          }));
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: ApiKeyData;
+        };
+
+        if (!payload.success || !payload.data) {
+          setApiKeysByApp((prev) => ({
+            ...prev,
+            [expandedAppId]: {
+              data: prev[expandedAppId]?.data,
+              isLoading: false,
+              error: "Unable to load API credentials. Please try again.",
+              isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+            },
+          }));
+          return;
+        }
+
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            data: payload.data,
+            isLoading: false,
+            error: "",
+            isRevealed: false,
+          },
+        }));
+      } catch {
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            data: prev[expandedAppId]?.data,
+            isLoading: false,
+            error: "Unable to load API credentials. Please try again.",
+            isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+          },
+        }));
+      }
+    };
+
     void loadUsers();
+    void loadApiKey();
   }, [expandedAppId, usersByApp]);
 
   const updateUser = async (
@@ -284,6 +412,110 @@ const HomePage = () => {
     }
   };
 
+  const toggleApiKeyVisibility = (appId: string) => {
+    setApiKeysByApp((prev) => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        isRevealed: !(prev[appId]?.isRevealed ?? false),
+      },
+    }));
+  };
+
+  const copyApiKey = async (appId: string) => {
+    const apiKey =
+      apiKeysByApp[appId]?.data?.plaintext ??
+      apiKeysByApp[appId]?.data?.masked;
+    if (!apiKey) return;
+
+    try {
+      await navigator.clipboard.writeText(apiKey);
+    } catch {
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          error: "Unable to copy the API key. Please copy manually.",
+        },
+      }));
+    }
+  };
+
+  const rotateApiKey = async (appId: string) => {
+    const confirmRotation = window.confirm(
+      "Regenerate API key? The existing key will be revoked immediately.",
+    );
+    if (!confirmRotation) return;
+
+    setApiKeysByApp((prev) => ({
+      ...prev,
+      [appId]: {
+        data: prev[appId]?.data,
+        isLoading: true,
+        error: "",
+        isRevealed: true,
+      },
+    }));
+
+    try {
+      const response = await fetch(`/dashboard/apps/${appId}/api-key/rotate`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            data: prev[appId]?.data,
+            isLoading: false,
+            error: "Unable to rotate API key. Please try again.",
+            isRevealed: prev[appId]?.isRevealed ?? false,
+          },
+        }));
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: ApiKeyData & { plaintext: string };
+      };
+
+      if (!payload.success || !payload.data) {
+        setApiKeysByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            data: prev[appId]?.data,
+            isLoading: false,
+            error: "Unable to rotate API key. Please try again.",
+            isRevealed: prev[appId]?.isRevealed ?? false,
+          },
+        }));
+        return;
+      }
+
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          data: payload.data,
+          isLoading: false,
+          error: "",
+          isRevealed: true,
+        },
+      }));
+    } catch {
+      setApiKeysByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          data: prev[appId]?.data,
+          isLoading: false,
+          error: "Unable to rotate API key. Please try again.",
+          isRevealed: prev[appId]?.isRevealed ?? false,
+        },
+      }));
+    }
+  };
+
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -347,12 +579,18 @@ const HomePage = () => {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Dashboard Home</h1>
-          <p className="text-slate-300">
+          <p className="text-[var(--theme-muted)]">
             Manage your applications and developer access from one place.
           </p>
         </div>
-        <div className="w-full max-w-xs">
-          <Button type="button" onClick={handleLogout} disabled={isLoggingOut}>
+        <div className="flex w-full max-w-xs items-center justify-end gap-3">
+          <ThemeToggle />
+          <Button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-auto px-4"
+          >
             {isLoggingOut ? "Signing out…" : "Sign out"}
           </Button>
         </div>
@@ -394,9 +632,11 @@ const HomePage = () => {
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">Your applications</h2>
         {isLoading ? (
-          <p className="text-sm text-slate-400">Loading applications…</p>
+          <p className="text-sm text-[var(--theme-muted-strong)]">
+            Loading applications…
+          </p>
         ) : apps.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-[var(--theme-muted-strong)]">
             No applications yet. Create one to get started.
           </p>
         ) : (
@@ -405,6 +645,7 @@ const HomePage = () => {
               const isExpanded = expandedAppId === app.id;
 
               const usersState = usersByApp[app.id];
+              const apiKeyState = apiKeysByApp[app.id];
 
               return (
                 <Card key={app.id}>
@@ -421,13 +662,13 @@ const HomePage = () => {
                         <CardTitle>{app.name}</CardTitle>
                         <CardDescription>Status: {app.status}</CardDescription>
                       </div>
-                      <span className="text-sm text-slate-400">
+                      <span className="text-sm text-[var(--theme-muted-strong)]">
                         {isExpanded ? "Hide" : "View"} details
                       </span>
                     </CardHeader>
                   </button>
                   <CardContent>
-                    <p className="text-sm text-slate-300">
+                    <p className="text-sm text-[var(--theme-muted)]">
                       Created {formatDate(app.created_at)}
                     </p>
                     <div
@@ -437,12 +678,72 @@ const HomePage = () => {
                           : "max-h-0 opacity-0"
                       }`}
                     >
-                      <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-                        <h3 className="text-sm font-semibold text-slate-100">
+                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                          API Credentials
+                        </h3>
+                        <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
+                          Use this key in your app to authenticate public API requests.
+                        </p>
+                        {apiKeyState?.error ? (
+                          <p className="mt-2 text-sm text-rose-400" role="alert">
+                            {apiKeyState.error}
+                          </p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <div className="min-w-[220px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-3 py-2 text-sm font-mono text-[var(--theme-input-text)]">
+                            {apiKeyState?.isLoading
+                              ? "Loading…"
+                              : apiKeyState?.isRevealed
+                                ? apiKeyState.data?.plaintext ??
+                                  apiKeyState?.data?.masked ??
+                                  "—"
+                                : "Hidden"}
+                          </div>
+                          <Button
+                            type="button"
+                            className="h-9 w-auto px-3 text-xs"
+                            disabled={!apiKeyState?.data || apiKeyState?.isLoading}
+                            onClick={() => toggleApiKeyVisibility(app.id)}
+                          >
+                            {apiKeyState?.isRevealed ? "Hide" : "Show"}
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-9 w-auto px-3 text-xs"
+                            disabled={!apiKeyState?.data || !apiKeyState?.isRevealed}
+                            onClick={() => copyApiKey(app.id)}
+                          >
+                            Copy
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-9 w-auto px-3 text-xs"
+                            onClick={() => rotateApiKey(app.id)}
+                            disabled={apiKeyState?.isLoading}
+                          >
+                            Regenerate
+                          </Button>
+                        </div>
+                        {apiKeyState?.data ? (
+                          <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
+                            Created {formatDate(apiKeyState.data.created_at)}
+                            {apiKeyState.data.last_used_at
+                              ? ` • Last used ${formatDate(apiKeyState.data.last_used_at)}`
+                              : " • Never used"}
+                          </p>
+                        ) : null}
+                        <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
+                          Regenerating revokes the existing key immediately. Store the
+                          new key somewhere safe.
+                        </p>
+                      </div>
+                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
                           Users
                         </h3>
                         {!usersState || usersState.isLoading ? (
-                          <p className="mt-2 text-sm text-slate-400">
+                          <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
                             Loading users…
                           </p>
                         ) : usersState.error ? (
@@ -450,14 +751,15 @@ const HomePage = () => {
                             {usersState.error}
                           </p>
                         ) : usersState.items.length === 0 ? (
-                          <p className="mt-2 text-sm text-slate-400">
+                          <p className="mt-2 text-sm text-[var(--theme-muted-strong)]">
                             {usersState.emptyMessage}
                           </p>
                         ) : (
                           <div className="mt-3 overflow-x-auto">
-                            <table className="w-full text-left text-sm text-slate-200">
-                              <thead className="text-xs uppercase text-slate-500">
+                            <table className="w-full text-left text-sm text-[var(--theme-fg)]">
+                              <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
                                 <tr>
+                                  <th className="py-2">Username</th>
                                   <th className="py-2">Email</th>
                                   <th className="py-2">Rank</th>
                                   <th className="py-2">Status</th>
@@ -466,13 +768,14 @@ const HomePage = () => {
                                   <th className="py-2 text-right">Actions</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-800">
+                              <tbody className="divide-y divide-[var(--theme-border)]">
                                 {usersState.items.map((user) => (
                                   <tr key={user.id} className="align-top">
-                                    <td className="py-3">{user.email}</td>
+                                    <td className="py-3">{user.username}</td>
+                                    <td className="py-3">{user.email ?? "—"}</td>
                                     <td className="py-3">
                                       <select
-                                        className="h-9 rounded-md border border-slate-800 bg-slate-950 px-2 text-sm text-slate-100"
+                                        className="h-9 rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
                                         value={user.rank_id ?? ""}
                                         onChange={(event) =>
                                           updateUser(app.id, user.id, {
@@ -523,6 +826,65 @@ const HomePage = () => {
                             </table>
                           </div>
                         )}
+                      </div>
+                      <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                        <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                          Registration requirements
+                        </h3>
+                        <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
+                          Configure which fields are required when end users
+                          register through the public API.
+                        </p>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor={`email-policy-${app.id}`}>
+                              Email policy
+                            </Label>
+                            <select
+                              id={`email-policy-${app.id}`}
+                              className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                              value={app.email_policy}
+                              onChange={(event) =>
+                                updateRegistrationPolicies(app.id, {
+                                  email_policy: event.target
+                                    .value as Application["email_policy"],
+                                })
+                              }
+                            >
+                              <option value="required">Required</option>
+                              <option value="optional">Optional</option>
+                              <option value="disabled">Disabled</option>
+                            </select>
+                            <p className="text-xs text-[var(--theme-muted-strong)]">
+                              Required forces end users to provide email.
+                              Disabled rejects email on registration.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`license-policy-${app.id}`}>
+                              License policy
+                            </Label>
+                            <select
+                              id={`license-policy-${app.id}`}
+                              className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                              value={app.license_policy}
+                              onChange={(event) =>
+                                updateRegistrationPolicies(app.id, {
+                                  license_policy: event.target
+                                    .value as Application["license_policy"],
+                                })
+                              }
+                            >
+                              <option value="required">Required</option>
+                              <option value="optional">Optional</option>
+                              <option value="disabled">Disabled</option>
+                            </select>
+                            <p className="text-xs text-[var(--theme-muted-strong)]">
+                              Required forces a license code during registration.
+                              Disabled rejects license codes on sign up.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
