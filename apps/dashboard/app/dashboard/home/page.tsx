@@ -47,18 +47,20 @@ type UsersState = {
 };
 
 type ApiKeyData = {
-  id: string;
-  masked: string;
-  created_at: string;
-  last_used_at: string | null;
-  plaintext?: string;
+  hasKey: boolean;
+  last4: string | null;
+  createdAt: string | null;
+  lastUsedAt: string | null;
 };
 
 type ApiKeyState = {
   data?: ApiKeyData;
+  maskedKey: string;
+  fullKey: string | null;
   isLoading: boolean;
   error: string;
   isRevealed: boolean;
+  showHint: boolean;
 };
 
 const HomePage = () => {
@@ -73,6 +75,9 @@ const HomePage = () => {
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [usersByApp, setUsersByApp] = useState<Record<string, UsersState>>({});
   const [apiKeysByApp, setApiKeysByApp] = useState<Record<string, ApiKeyState>>({});
+
+  const getMaskedKey = (last4?: string | null) =>
+    last4 ? `••••••${last4}` : "••••••";
 
   const updateRegistrationPolicies = async (
     appId: string,
@@ -231,9 +236,12 @@ const HomePage = () => {
         ...prev,
         [expandedAppId]: {
           data: prev[expandedAppId]?.data,
+          maskedKey: prev[expandedAppId]?.maskedKey ?? "••••••",
+          fullKey: prev[expandedAppId]?.fullKey ?? null,
           isLoading: true,
           error: "",
           isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+          showHint: prev[expandedAppId]?.showHint ?? false,
         },
       }));
 
@@ -250,9 +258,12 @@ const HomePage = () => {
             ...prev,
             [expandedAppId]: {
               data: prev[expandedAppId]?.data,
+              maskedKey: prev[expandedAppId]?.maskedKey ?? "••••••",
+              fullKey: prev[expandedAppId]?.fullKey ?? null,
               isLoading: false,
               error: "Unable to load API credentials. Please try again.",
               isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+              showHint: prev[expandedAppId]?.showHint ?? false,
             },
           }));
           return;
@@ -268,21 +279,28 @@ const HomePage = () => {
             ...prev,
             [expandedAppId]: {
               data: prev[expandedAppId]?.data,
+              maskedKey: prev[expandedAppId]?.maskedKey ?? "••••••",
+              fullKey: prev[expandedAppId]?.fullKey ?? null,
               isLoading: false,
               error: "Unable to load API credentials. Please try again.",
               isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+              showHint: prev[expandedAppId]?.showHint ?? false,
             },
           }));
           return;
         }
 
+        const maskedKey = getMaskedKey(payload.data.last4);
         setApiKeysByApp((prev) => ({
           ...prev,
           [expandedAppId]: {
             data: payload.data,
+            maskedKey,
+            fullKey: null,
             isLoading: false,
             error: "",
             isRevealed: false,
+            showHint: false,
           },
         }));
       } catch {
@@ -290,9 +308,12 @@ const HomePage = () => {
           ...prev,
           [expandedAppId]: {
             data: prev[expandedAppId]?.data,
+            maskedKey: prev[expandedAppId]?.maskedKey ?? "••••••",
+            fullKey: prev[expandedAppId]?.fullKey ?? null,
             isLoading: false,
             error: "Unable to load API credentials. Please try again.",
             isRevealed: prev[expandedAppId]?.isRevealed ?? false,
+            showHint: prev[expandedAppId]?.showHint ?? false,
           },
         }));
       }
@@ -417,13 +438,17 @@ const HomePage = () => {
       ...prev,
       [appId]: {
         ...prev[appId],
-        isRevealed: !(prev[appId]?.isRevealed ?? false),
+        isRevealed: prev[appId]?.fullKey
+          ? !(prev[appId]?.isRevealed ?? false)
+          : false,
+        showHint: !prev[appId]?.fullKey && !(prev[appId]?.isRevealed ?? false),
       },
     }));
   };
 
   const copyApiKey = async (appId: string) => {
-    const apiKey = apiKeysByApp[appId]?.data?.plaintext;
+    const entry = apiKeysByApp[appId];
+    const apiKey = entry?.isRevealed ? entry.fullKey : null;
     if (!apiKey) return;
 
     try {
@@ -449,9 +474,12 @@ const HomePage = () => {
       ...prev,
       [appId]: {
         data: prev[appId]?.data,
+        maskedKey: prev[appId]?.maskedKey ?? "••••••",
+        fullKey: prev[appId]?.fullKey ?? null,
         isLoading: true,
         error: "",
         isRevealed: true,
+        showHint: false,
       },
     }));
 
@@ -466,9 +494,12 @@ const HomePage = () => {
           ...prev,
           [appId]: {
             data: prev[appId]?.data,
+            maskedKey: prev[appId]?.maskedKey ?? "••••••",
+            fullKey: prev[appId]?.fullKey ?? null,
             isLoading: false,
             error: "Unable to rotate API key. Please try again.",
             isRevealed: prev[appId]?.isRevealed ?? false,
+            showHint: prev[appId]?.showHint ?? false,
           },
         }));
         return;
@@ -476,7 +507,7 @@ const HomePage = () => {
 
       const payload = (await response.json()) as {
         success: boolean;
-        data?: ApiKeyData & { plaintext: string };
+        data?: { apiKey: string; last4: string; createdAt: string };
       };
 
       if (!payload.success || !payload.data) {
@@ -484,21 +515,33 @@ const HomePage = () => {
           ...prev,
           [appId]: {
             data: prev[appId]?.data,
+            maskedKey: prev[appId]?.maskedKey ?? "••••••",
+            fullKey: prev[appId]?.fullKey ?? null,
             isLoading: false,
             error: "Unable to rotate API key. Please try again.",
             isRevealed: prev[appId]?.isRevealed ?? false,
+            showHint: prev[appId]?.showHint ?? false,
           },
         }));
         return;
       }
 
+      const maskedKey = getMaskedKey(payload.data.last4);
       setApiKeysByApp((prev) => ({
         ...prev,
         [appId]: {
-          data: payload.data,
+          data: {
+            hasKey: true,
+            last4: payload.data.last4,
+            createdAt: payload.data.createdAt,
+            lastUsedAt: null,
+          },
+          maskedKey,
+          fullKey: payload.data.apiKey,
           isLoading: false,
           error: "",
           isRevealed: true,
+          showHint: false,
         },
       }));
     } catch {
@@ -506,9 +549,12 @@ const HomePage = () => {
         ...prev,
         [appId]: {
           data: prev[appId]?.data,
+          maskedKey: prev[appId]?.maskedKey ?? "••••••",
+          fullKey: prev[appId]?.fullKey ?? null,
           isLoading: false,
           error: "Unable to rotate API key. Please try again.",
           isRevealed: prev[appId]?.isRevealed ?? false,
+          showHint: prev[appId]?.showHint ?? false,
         },
       }));
     }
@@ -688,44 +734,60 @@ const HomePage = () => {
                             {apiKeyState.error}
                           </p>
                         ) : null}
+                        {apiKeyState?.isRevealed && apiKeyState.fullKey ? (
+                          <p className="mt-2 text-xs text-amber-500">
+                            Copy this now — it won’t be shown again.
+                          </p>
+                        ) : null}
+                        {apiKeyState?.showHint ? (
+                          <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
+                            Full key is only shown once after regeneration.
+                          </p>
+                        ) : null}
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <div className="min-w-[220px] rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] px-3 py-2 text-sm font-mono text-[var(--theme-input-text)]">
                             {apiKeyState?.isLoading
                               ? "Loading…"
-                              : apiKeyState?.isRevealed && apiKeyState.data?.plaintext
-                                ? apiKeyState.data.plaintext
-                                : apiKeyState?.data?.masked ?? "—"}
+                              : apiKeyState?.isRevealed && apiKeyState.fullKey
+                                ? apiKeyState.fullKey
+                                : apiKeyState?.maskedKey ?? "••••••"}
                           </div>
                           <Button
                             type="button"
-                            className="h-9 w-auto px-3 text-xs"
-                            disabled={!apiKeyState?.data || apiKeyState?.isLoading}
+                            className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                            disabled={apiKeyState?.isLoading}
                             onClick={() => toggleApiKeyVisibility(app.id)}
                           >
                             {apiKeyState?.isRevealed ? "Hide" : "Show"}
                           </Button>
                           <Button
                             type="button"
-                            className="h-9 w-auto px-3 text-xs"
-                            disabled={!apiKeyState?.data?.plaintext}
+                            className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                            disabled={
+                              apiKeyState?.isLoading ||
+                              !apiKeyState?.fullKey ||
+                              !apiKeyState?.isRevealed
+                            }
                             onClick={() => copyApiKey(app.id)}
                           >
                             Copy
                           </Button>
                           <Button
                             type="button"
-                            className="h-9 w-auto px-3 text-xs"
-                            onClick={() => rotateApiKey(app.id)}
                             disabled={apiKeyState?.isLoading}
+                            className="h-7 w-auto bg-rose-500 px-2 text-[11px] text-white hover:bg-rose-600 focus-visible:ring-rose-400"
+                            onClick={() => rotateApiKey(app.id)}
                           >
                             Regenerate
                           </Button>
                         </div>
                         {apiKeyState?.data ? (
                           <p className="mt-2 text-xs text-[var(--theme-muted-strong)]">
-                            Created {formatDate(apiKeyState.data.created_at)}
-                            {apiKeyState.data.last_used_at
-                              ? ` • Last used ${formatDate(apiKeyState.data.last_used_at)}`
+                            {apiKeyState.data.createdAt
+                              ? `Created ${formatDate(apiKeyState.data.createdAt)}`
+                              : "Created —"}
+                            {apiKeyState.data.lastUsedAt
+                              ? ` • Last used ${formatDate(apiKeyState.data.lastUsedAt)}`
                               : " • Never used"}
                           </p>
                         ) : null}

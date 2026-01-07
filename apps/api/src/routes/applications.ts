@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { errorResponse, successResponse } from "@iced/shared";
 import { prisma } from "../prisma";
@@ -25,15 +25,35 @@ const UpdateSettingsSchema = z.object({
   default_rank_id: z.string().uuid().nullable().optional(),
 });
 
-const ensureDeveloperApp = async (appId: string, developerId: string) => {
-  const application = await prisma.application.findFirst({
-    where: { id: appId, developerUserId: developerId },
-    select: { id: true },
+export const ensureDeveloperApp = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  if (!request.developerUser) {
+    reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
+    return null;
+  }
+
+  const { appId } = z
+    .object({ appId: z.string().uuid() })
+    .parse(request.params);
+
+  const application = await prisma.application.findUnique({
+    where: { id: appId },
   });
 
   if (!application) {
-    throw new Error("Application not found.");
+    reply.code(404).send(errorResponse("not_found", "Application not found."));
+    return null;
   }
+
+  if (application.developerUserId !== request.developerUser.id) {
+    reply.code(403).send(errorResponse("forbidden", "Forbidden."));
+    return null;
+  }
+
+  request.app = application;
+  return application;
 };
 
 export const registerApplicationRoutes = async (
@@ -254,56 +274,38 @@ export const registerApplicationRoutes = async (
     });
 
     router.get("/apps/:appId/api-key", async (request, reply) => {
-      if (!request.developerUser) {
-        reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
-        return;
-      }
+      const application = await ensureDeveloperApp(request, reply);
+      if (!application) return;
 
-      const { appId } = z
-        .object({ appId: z.string().uuid() })
-        .parse(request.params);
-      try {
-        await ensureDeveloperApp(appId, request.developerUser.id);
-      } catch {
-        reply.code(404).send(errorResponse("not_found", "Application not found."));
-        return;
-      }
-
-      const { apiKey, masked } = await ApiKeyService.ensureActiveKey(appId);
+      const { apiKey, last4 } = await ApiKeyService.ensureActiveKey(
+        application.id,
+      );
 
       reply.send(
         successResponse({
-          id: apiKey.id,
-          masked,
-          created_at: apiKey.createdAt,
-          last_used_at: apiKey.lastUsedAt,
+          hasKey: true,
+          last4,
+          createdAt: apiKey.apiKeyCreatedAt
+            ? apiKey.apiKeyCreatedAt.toISOString()
+            : null,
+          lastUsedAt: apiKey.apiKeyLastUsedAt
+            ? apiKey.apiKeyLastUsedAt.toISOString()
+            : null,
         }),
       );
     });
 
     router.post("/apps/:appId/api-key/rotate", async (request, reply) => {
-      if (!request.developerUser) {
-        reply.code(401).send(errorResponse("unauthorized", "Unauthorized."));
-        return;
-      }
+      const application = await ensureDeveloperApp(request, reply);
+      if (!application) return;
 
-      const { appId } = z
-        .object({ appId: z.string().uuid() })
-        .parse(request.params);
-      try {
-        await ensureDeveloperApp(appId, request.developerUser.id);
-      } catch {
-        reply.code(404).send(errorResponse("not_found", "Application not found."));
-        return;
-      }
-
-      const rotated = await ApiKeyService.rotateKey(appId);
+      const rotated = await ApiKeyService.rotateKey(application.id);
 
       await writeAuditLog({
         actorType: "developer",
         actorId: request.developerUser.id,
         action: "app.api_key.rotate",
-        appId,
+        appId: application.id,
         metadata: {
           api_key_id: rotated.apiKey.id,
         },
@@ -311,10 +313,9 @@ export const registerApplicationRoutes = async (
 
       reply.send(
         successResponse({
-          id: rotated.apiKey.id,
-          plaintext: rotated.plaintext,
-          masked: rotated.masked,
-          created_at: rotated.apiKey.createdAt,
+          apiKey: rotated.plaintext,
+          last4: rotated.last4,
+          createdAt: rotated.apiKey.createdAt.toISOString(),
         }),
       );
     });
