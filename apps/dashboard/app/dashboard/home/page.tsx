@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ThemeToggle from "@/components/theme-toggle";
+import { banUser, type BanUserPayload, unbanUser } from "@/lib/api-users";
 
 const formatDate = (value: string | Date) =>
   new Date(value).toLocaleString(undefined, {
@@ -31,6 +32,9 @@ type User = {
   status: "active" | "disabled";
   created_at: string;
   last_login_at: string | null;
+  banned_until: string | null;
+  ban_reason: string | null;
+  banned_at: string | null;
 };
 
 type Rank = {
@@ -63,6 +67,11 @@ type ApiKeyState = {
   showHint: boolean;
 };
 
+type BanModalState = {
+  appId: string;
+  user: User;
+};
+
 const HomePage = () => {
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>([]);
@@ -75,9 +84,36 @@ const HomePage = () => {
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [usersByApp, setUsersByApp] = useState<Record<string, UsersState>>({});
   const [apiKeysByApp, setApiKeysByApp] = useState<Record<string, ApiKeyState>>({});
+  const [banModal, setBanModal] = useState<BanModalState | null>(null);
+  const [banFormError, setBanFormError] = useState("");
+  const [banForm, setBanForm] = useState<{
+    durationSeconds?: number;
+    customUntil: string;
+    permanent: boolean;
+    reason: string;
+    revokeSessions: boolean;
+  }>({
+    customUntil: "",
+    permanent: false,
+    reason: "",
+    revokeSessions: false,
+  });
+  const [toast, setToast] = useState("");
 
   const getMaskedKey = (last4?: string | null) =>
     last4 ? `••••••${last4}` : "••••••";
+
+  const isUserBanned = (user: User) =>
+    user.banned_until ? new Date(user.banned_until) > new Date() : false;
+
+  const isPermanentBan = (user: User) =>
+    user.banned_until ? new Date(user.banned_until).getUTCFullYear() >= 9999 : false;
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const updateRegistrationPolicies = async (
     appId: string,
@@ -433,6 +469,129 @@ const HomePage = () => {
     }
   };
 
+  const updateUserState = (appId: string, user: User) => {
+    setUsersByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            items: prev[appId].items.map((entry) =>
+              entry.id === user.id ? user : entry,
+            ),
+          }
+        : {
+            items: [user],
+            ranks: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+          },
+    }));
+  };
+
+  const openBanModal = (appId: string, user: User) => {
+    setBanForm({
+      durationSeconds: undefined,
+      customUntil: "",
+      permanent: false,
+      reason: "",
+      revokeSessions: false,
+    });
+    setBanFormError("");
+    setBanModal({ appId, user });
+  };
+
+  const submitBan = async () => {
+    if (!banModal) return;
+
+    const { appId, user } = banModal;
+    if (!banForm.permanent && !banForm.customUntil && !banForm.durationSeconds) {
+      setBanFormError("Select a preset, custom date, or permanent ban.");
+      return;
+    }
+
+    const payload: BanUserPayload = {
+      reason: banForm.reason.trim() || undefined,
+      revoke_sessions: banForm.revokeSessions,
+      permanent: banForm.permanent || undefined,
+    };
+
+    if (banForm.permanent) {
+      payload.permanent = true;
+    } else if (banForm.customUntil) {
+      payload.banned_until = new Date(banForm.customUntil).toISOString();
+    } else if (banForm.durationSeconds) {
+      payload.duration_seconds = banForm.durationSeconds;
+    }
+
+    try {
+      const response = await banUser(appId, user.id, payload);
+      if (!response.ok) {
+        setBanFormError("Unable to ban user. Please try again.");
+        return;
+      }
+
+      const data = (await response.json()) as {
+        success: boolean;
+        data?: { user?: User };
+      };
+
+      if (!data.success || !data.data?.user) {
+        setBanFormError("Unable to ban user. Please try again.");
+        return;
+      }
+
+      updateUserState(appId, data.data.user);
+      setToast("User banned.");
+      setBanModal(null);
+    } catch {
+      setBanFormError("Unable to ban user. Please try again.");
+    }
+  };
+
+  const handleUnban = async (appId: string, user: User) => {
+    try {
+      const response = await unbanUser(appId, user.id);
+      if (!response.ok) {
+        setUsersByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            ...prev[appId],
+            error: "Unable to unban the user. Please try again.",
+          },
+        }));
+        return;
+      }
+
+      const data = (await response.json()) as {
+        success: boolean;
+        data?: { user?: User };
+      };
+
+      if (!data.success || !data.data?.user) {
+        setUsersByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            ...prev[appId],
+            error: "Unable to unban the user. Please try again.",
+          },
+        }));
+        return;
+      }
+
+      updateUserState(appId, data.data.user);
+      setToast("User unbanned.");
+    } catch {
+      setUsersByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          error: "Unable to unban the user. Please try again.",
+        },
+      }));
+    }
+  };
+
   const toggleApiKeyVisibility = (appId: string) => {
     setApiKeysByApp((prev) => ({
       ...prev,
@@ -620,6 +779,11 @@ const HomePage = () => {
 
   return (
     <section className="space-y-8">
+      {toast ? (
+        <div className="fixed right-4 top-4 z-50 rounded-md border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] px-4 py-2 text-sm text-[var(--theme-fg)] shadow-lg">
+          {toast}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Dashboard Home</h1>
@@ -815,14 +979,17 @@ const HomePage = () => {
                                     <th className="py-2">Username</th>
                                     <th className="py-2">Email</th>
                                     <th className="py-2">Rank</th>
-                                    <th className="py-2">Status</th>
+                                    <th className="py-2">Access</th>
                                     <th className="py-2">Created</th>
                                     <th className="py-2">Last login</th>
                                     <th className="py-2 text-right">Actions</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[var(--theme-border)]">
-                                  {usersState.items.map((user) => (
+                                  {usersState.items.map((user) => {
+                                    const banned = isUserBanned(user);
+                                    const permanent = banned && isPermanentBan(user);
+                                    return (
                                     <tr key={user.id} className="align-top">
                                       <td className="py-3">{user.username}</td>
                                       <td className="py-3">{user.email ?? "—"}</td>
@@ -844,8 +1011,17 @@ const HomePage = () => {
                                           ))}
                                         </select>
                                       </td>
-                                      <td className="py-3 capitalize">
-                                        {user.status}
+                                      <td className="py-3">
+                                        <div className="font-medium">
+                                          {banned ? "Banned" : "Allowed"}
+                                        </div>
+                                        <div className="text-xs text-[var(--theme-muted-strong)]">
+                                          {banned
+                                            ? permanent
+                                              ? "Permanent"
+                                              : `until ${formatDate(user.banned_until!)}`
+                                            : "Access granted"}
+                                        </div>
                                       </td>
                                       <td className="py-3">
                                         {formatDate(user.created_at)}
@@ -856,25 +1032,27 @@ const HomePage = () => {
                                           : "—"}
                                       </td>
                                       <td className="py-3 text-right">
-                                        <Button
-                                          type="button"
-                                          className="h-9 w-auto px-4"
-                                          onClick={() =>
-                                            updateUser(app.id, user.id, {
-                                              status:
-                                                user.status === "active"
-                                                  ? "disabled"
-                                                  : "active",
-                                            })
-                                          }
-                                        >
-                                          {user.status === "active"
-                                            ? "Disable"
-                                            : "Enable"}
-                                        </Button>
+                                        {banned ? (
+                                          <Button
+                                            type="button"
+                                            className="h-8 w-auto px-3 text-xs"
+                                            onClick={() => handleUnban(app.id, user)}
+                                          >
+                                            Unban
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                            type="button"
+                                            className="h-8 w-auto bg-rose-500 px-3 text-xs text-white hover:bg-rose-600 focus-visible:ring-rose-400"
+                                            onClick={() => openBanModal(app.id, user)}
+                                          >
+                                            Ban
+                                          </Button>
+                                        )}
                                       </td>
                                     </tr>
-                                  ))}
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -948,6 +1126,150 @@ const HomePage = () => {
           </div>
         )}
       </div>
+
+      {banModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--theme-fg)]">
+                  Ban {banModal.user.username}
+                </h2>
+                <p className="text-sm text-[var(--theme-muted-strong)]">
+                  Choose how long access should be revoked.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-sm text-[var(--theme-muted-strong)] hover:text-[var(--theme-fg)]"
+                onClick={() => setBanModal(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>Duration presets</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "1h", value: 60 * 60 },
+                    { label: "24h", value: 60 * 60 * 24 },
+                    { label: "7d", value: 60 * 60 * 24 * 7 },
+                    { label: "30d", value: 60 * 60 * 24 * 30 },
+                  ].map((preset) => (
+                    <Button
+                      key={preset.label}
+                      type="button"
+                      className={`h-8 w-auto border px-3 text-xs ${
+                        banForm.durationSeconds === preset.value
+                          ? "border-[var(--theme-ring)] bg-[var(--theme-panel-bg)]"
+                          : "border-[var(--theme-border)] bg-transparent"
+                      }`}
+                      onClick={() =>
+                        setBanForm((prev) => ({
+                          ...prev,
+                          durationSeconds: preset.value,
+                          customUntil: "",
+                          permanent: false,
+                        }))
+                      }
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ban-until">Custom end date</Label>
+                <Input
+                  id="ban-until"
+                  type="datetime-local"
+                  value={banForm.customUntil}
+                  onChange={(event) =>
+                    setBanForm((prev) => ({
+                      ...prev,
+                      customUntil: event.target.value,
+                      durationSeconds: undefined,
+                      permanent: false,
+                    }))
+                  }
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-[var(--theme-fg)]">
+                <input
+                  type="checkbox"
+                  checked={banForm.permanent}
+                  onChange={(event) =>
+                    setBanForm((prev) => ({
+                      ...prev,
+                      permanent: event.target.checked,
+                      durationSeconds: undefined,
+                      customUntil: "",
+                    }))
+                  }
+                />
+                Permanent ban
+              </label>
+
+              <div className="space-y-2">
+                <Label htmlFor="ban-reason">Reason (optional)</Label>
+                <textarea
+                  id="ban-reason"
+                  value={banForm.reason}
+                  onChange={(event) =>
+                    setBanForm((prev) => ({
+                      ...prev,
+                      reason: event.target.value,
+                    }))
+                  }
+                  className="min-h-[90px] w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] p-2 text-sm text-[var(--theme-input-text)]"
+                  placeholder="Add a note for internal tracking..."
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-[var(--theme-fg)]">
+                <input
+                  type="checkbox"
+                  checked={banForm.revokeSessions}
+                  onChange={(event) =>
+                    setBanForm((prev) => ({
+                      ...prev,
+                      revokeSessions: event.target.checked,
+                    }))
+                  }
+                />
+                Revoke sessions now
+              </label>
+
+              {banFormError ? (
+                <p className="text-sm text-rose-400" role="alert">
+                  {banFormError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                className="h-9 w-auto border border-[var(--theme-border)] bg-transparent px-4 text-sm"
+                onClick={() => setBanModal(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-9 w-auto bg-rose-500 px-4 text-sm text-white hover:bg-rose-600 focus-visible:ring-rose-400"
+                onClick={() => void submitBan()}
+              >
+                Ban user
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };
