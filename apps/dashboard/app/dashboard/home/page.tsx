@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,6 +63,63 @@ type ApiKeyState = {
   showHint: boolean;
 };
 
+type License = {
+  id: string;
+  rank_id: string;
+  pool_id: string | null;
+  status: "active" | "redeemed" | "revoked" | "expired";
+  max_uses: number | null;
+  use_count: number;
+  duration_seconds: number | null;
+  expires_at: string | null;
+  redeemed_at: string | null;
+  redeemed_by_id: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+type LicenseFormState = {
+  rankId: string;
+  maxUses: string;
+  durationSeconds: string;
+  expiresAt: string;
+  isSubmitting: boolean;
+  error: string;
+  keys: string[];
+};
+
+type RankFormState = {
+  name: string;
+  permissionIds: string[];
+  newPermissions: string;
+  isSubmitting: boolean;
+  error: string;
+};
+
+type LicenseState = {
+  items: License[];
+  isLoading: boolean;
+  error: string;
+  emptyMessage: string;
+  form: LicenseFormState;
+  rankForm: RankFormState;
+  showList: boolean;
+  isRankModalOpen: boolean;
+  isLicenseModalOpen: boolean;
+  keysById: Record<string, string>;
+};
+
+type Permission = {
+  id: string;
+  name: string;
+};
+
+type PermissionsState = {
+  items: Permission[];
+  isLoading: boolean;
+  error: string;
+};
+
 const HomePage = () => {
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>([]);
@@ -75,6 +132,16 @@ const HomePage = () => {
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [usersByApp, setUsersByApp] = useState<Record<string, UsersState>>({});
   const [apiKeysByApp, setApiKeysByApp] = useState<Record<string, ApiKeyState>>({});
+  const [licensesByApp, setLicensesByApp] = useState<Record<string, LicenseState>>(
+    {},
+  );
+  const [permissionsByApp, setPermissionsByApp] = useState<
+    Record<string, PermissionsState>
+  >({});
+  const loadedUsersRef = useRef(new Set<string>());
+  const loadedApiKeyRef = useRef(new Set<string>());
+  const loadedLicensesRef = useRef(new Set<string>());
+  const loadedPermissionsRef = useRef(new Set<string>());
 
   const getMaskedKey = (last4?: string | null) =>
     last4 ? `••••••${last4}` : "••••••";
@@ -155,11 +222,27 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
-    if (!expandedAppId || usersByApp[expandedAppId]) {
+    if (!expandedAppId) {
+      return;
+    }
+
+    const shouldLoadUsers = !loadedUsersRef.current.has(expandedAppId);
+    const shouldLoadApiKey = !loadedApiKeyRef.current.has(expandedAppId);
+    const shouldLoadLicenses = !loadedLicensesRef.current.has(expandedAppId);
+    const shouldLoadPermissions = !loadedPermissionsRef.current.has(expandedAppId);
+
+    if (
+      !shouldLoadUsers &&
+      !shouldLoadApiKey &&
+      !shouldLoadLicenses &&
+      !shouldLoadPermissions
+    ) {
       return;
     }
 
     const loadUsers = async () => {
+      loadedUsersRef.current.add(expandedAppId);
+      loadedPermissionsRef.current.add(expandedAppId);
       setUsersByApp((prev) => ({
         ...prev,
         [expandedAppId]: {
@@ -172,11 +255,14 @@ const HomePage = () => {
       }));
 
       try {
-        const [usersResponse, ranksResponse] = await Promise.all([
+        const [usersResponse, ranksResponse, permissionsResponse] = await Promise.all([
           fetch(`/dashboard/apps/${expandedAppId}/users`, {
             credentials: "include",
           }),
           fetch(`/dashboard/apps/${expandedAppId}/ranks`, {
+            credentials: "include",
+          }),
+          fetch(`/dashboard/apps/${expandedAppId}/permissions`, {
             credentials: "include",
           }),
         ]);
@@ -204,9 +290,19 @@ const HomePage = () => {
               data?: Rank[];
             })
           : { success: false };
+        const permissionsPayload = permissionsResponse.ok
+          ? ((await permissionsResponse.json()) as {
+              success: boolean;
+              data?: Permission[];
+            })
+          : { success: false };
 
         const users = usersPayload.success ? usersPayload.data?.items ?? [] : [];
         const ranks = ranksPayload.success && ranksPayload.data ? ranksPayload.data : [];
+        const permissions =
+          permissionsPayload.success && permissionsPayload.data
+            ? permissionsPayload.data
+            : [];
 
         setUsersByApp((prev) => ({
           ...prev,
@@ -219,6 +315,33 @@ const HomePage = () => {
             emptyMessage: users.length === 0 ? "No users found for this application." : "",
           },
         }));
+        setPermissionsByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            items: permissions,
+            isLoading: false,
+            error: permissionsPayload.success
+              ? ""
+              : "Unable to load permissions. Please try again.",
+          },
+        }));
+
+        setLicensesByApp((prev) => {
+          const current = prev[expandedAppId];
+          if (!current || current.form.rankId || ranks.length === 0) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [expandedAppId]: {
+              ...current,
+              form: {
+                ...current.form,
+                rankId: ranks[0]?.id ?? "",
+              },
+            },
+          };
+        });
       } catch {
         setUsersByApp((prev) => ({
           ...prev,
@@ -228,10 +351,19 @@ const HomePage = () => {
             error: "Unable to load users. Please try again.",
           },
         }));
+        setPermissionsByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            items: [],
+            isLoading: false,
+            error: "Unable to load permissions. Please try again.",
+          },
+        }));
       }
     };
 
     const loadApiKey = async () => {
+      loadedApiKeyRef.current.add(expandedAppId);
       setApiKeysByApp((prev) => ({
         ...prev,
         [expandedAppId]: {
@@ -319,9 +451,97 @@ const HomePage = () => {
       }
     };
 
-    void loadUsers();
-    void loadApiKey();
-  }, [expandedAppId, usersByApp]);
+    const loadLicenses = async () => {
+      loadedLicensesRef.current.add(expandedAppId);
+      const initialRankForm: RankFormState = {
+        name: "",
+        permissionIds: [],
+        newPermissions: "",
+        isSubmitting: false,
+        error: "",
+      };
+      const initialForm: LicenseFormState = {
+        rankId: "",
+        maxUses: "",
+        durationSeconds: "",
+        expiresAt: "",
+        isSubmitting: false,
+        error: "",
+        keys: [],
+      };
+
+      setLicensesByApp((prev) => ({
+        ...prev,
+        [expandedAppId]: {
+          items: prev[expandedAppId]?.items ?? [],
+          isLoading: true,
+          error: "",
+          emptyMessage: "No licenses generated yet.",
+          form: prev[expandedAppId]?.form ?? initialForm,
+          rankForm: prev[expandedAppId]?.rankForm ?? initialRankForm,
+          showList: prev[expandedAppId]?.showList ?? false,
+          isRankModalOpen: prev[expandedAppId]?.isRankModalOpen ?? false,
+          isLicenseModalOpen: prev[expandedAppId]?.isLicenseModalOpen ?? false,
+          keysById: prev[expandedAppId]?.keysById ?? {},
+        },
+      }));
+
+      try {
+        const response = await fetch(`/dashboard/apps/${expandedAppId}/licenses`, {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          setLicensesByApp((prev) => ({
+            ...prev,
+            [expandedAppId]: {
+              ...prev[expandedAppId],
+              isLoading: false,
+              error: "Unable to load licenses. Please try again.",
+            },
+          }));
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: { items: License[] };
+        };
+
+        const items = payload.success ? payload.data?.items ?? [] : [];
+
+        setLicensesByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            ...prev[expandedAppId],
+            items,
+            isLoading: false,
+            error: payload.success ? "" : "Unable to load licenses. Please try again.",
+            emptyMessage: items.length === 0 ? "No licenses generated yet." : "",
+          },
+        }));
+      } catch {
+        setLicensesByApp((prev) => ({
+          ...prev,
+          [expandedAppId]: {
+            ...prev[expandedAppId],
+            isLoading: false,
+            error: "Unable to load licenses. Please try again.",
+          },
+        }));
+      }
+    };
+
+    if (shouldLoadUsers || shouldLoadPermissions) {
+      void loadUsers();
+    }
+    if (shouldLoadApiKey) {
+      void loadApiKey();
+    }
+    if (shouldLoadLicenses) {
+      void loadLicenses();
+    }
+  }, [expandedAppId]);
 
   const updateUser = async (
     appId: string,
@@ -560,6 +780,606 @@ const HomePage = () => {
     }
   };
 
+  const updateLicenseForm = (
+    appId: string,
+    updates: Partial<LicenseFormState>,
+  ) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            form: {
+              ...prev[appId].form,
+              ...updates,
+            },
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+              ...updates,
+            },
+            rankForm: {
+              name: "",
+              permissionIds: [],
+              newPermissions: "",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: false,
+            isRankModalOpen: false,
+            isLicenseModalOpen: false,
+            keysById: {},
+          },
+    }));
+  };
+
+  const updateRankForm = (appId: string, updates: Partial<RankFormState>) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            rankForm: {
+              ...prev[appId].rankForm,
+              ...updates,
+            },
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              permissionIds: [],
+              newPermissions: "",
+              isSubmitting: false,
+              error: "",
+              ...updates,
+            },
+            showList: false,
+            isRankModalOpen: false,
+            isLicenseModalOpen: false,
+            keysById: {},
+          },
+    }));
+  };
+
+  const toggleLicenseList = (appId: string) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            showList: !prev[appId].showList,
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              permissionIds: [],
+              newPermissions: "",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: true,
+            isRankModalOpen: false,
+            isLicenseModalOpen: false,
+            keysById: {},
+          },
+    }));
+  };
+
+  const toggleRankModal = (appId: string, isOpen: boolean) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            isRankModalOpen: isOpen,
+            rankForm: isOpen
+              ? prev[appId].rankForm
+              : {
+                  ...prev[appId].rankForm,
+                  error: "",
+                },
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              permissionIds: [],
+              newPermissions: "",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: false,
+            isRankModalOpen: isOpen,
+            isLicenseModalOpen: false,
+            keysById: {},
+          },
+    }));
+  };
+
+  const toggleLicenseModal = (appId: string, isOpen: boolean) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            isLicenseModalOpen: isOpen,
+            form: isOpen
+              ? prev[appId].form
+              : {
+                  ...prev[appId].form,
+                  error: "",
+                  keys: [],
+                },
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              permissionIds: [],
+              newPermissions: "",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: false,
+            isRankModalOpen: false,
+            isLicenseModalOpen: isOpen,
+            keysById: {},
+          },
+    }));
+  };
+
+  const togglePermissionSelection = (appId: string, permissionId: string) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            rankForm: {
+              ...prev[appId].rankForm,
+              permissionIds: prev[appId].rankForm.permissionIds.includes(
+                permissionId,
+              )
+                ? prev[appId].rankForm.permissionIds.filter(
+                    (item) => item !== permissionId,
+                  )
+                : [...prev[appId].rankForm.permissionIds, permissionId],
+            },
+          }
+        : prev[appId],
+    }));
+  };
+
+  const parsePermissionNames = (value: string) =>
+    value
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+  const createRank = async (appId: string) => {
+    const licenseState = licensesByApp[appId];
+    const permissionState = permissionsByApp[appId];
+    if (!licenseState) return;
+
+    const { name, permissionIds, newPermissions } = licenseState.rankForm;
+    if (!name.trim()) {
+      updateRankForm(appId, { error: "Enter a rank name." });
+      return;
+    }
+
+    updateRankForm(appId, { isSubmitting: true, error: "" });
+
+    try {
+      const existingPermissions = permissionState?.items ?? [];
+      const existingNames = new Set(
+        existingPermissions.map((permission) => permission.name.toLowerCase()),
+      );
+      const requestedNames = parsePermissionNames(newPermissions);
+      const uniqueNames = Array.from(
+        new Set(requestedNames.map((item) => item.toLowerCase())),
+      ).filter((item) => !existingNames.has(item));
+
+      const createdPermissions = await Promise.all(
+        uniqueNames.map(async (permissionName) => {
+          const response = await fetch(`/dashboard/apps/${appId}/permissions`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ name: permissionName }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Unable to create permission.");
+          }
+
+          const payload = (await response.json()) as {
+            success: boolean;
+            data?: Permission;
+          };
+
+          if (!payload.success || !payload.data) {
+            throw new Error("Unable to create permission.");
+          }
+
+          return payload.data;
+        }),
+      );
+
+      const response = await fetch(`/dashboard/apps/${appId}/ranks`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          priority: 0,
+        }),
+      });
+
+      if (!response.ok) {
+        updateRankForm(appId, {
+          isSubmitting: false,
+          error: "Unable to create rank. Please try again.",
+        });
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: Rank;
+      };
+
+      if (!payload.success || !payload.data) {
+        updateRankForm(appId, {
+          isSubmitting: false,
+          error: "Unable to create rank. Please try again.",
+        });
+        return;
+      }
+
+      const permissionIdsToAssign = [
+        ...permissionIds,
+        ...createdPermissions.map((permission) => permission.id),
+      ];
+
+      if (permissionIdsToAssign.length > 0) {
+        const assignResponse = await fetch(
+          `/dashboard/apps/${appId}/ranks/${payload.data.id}/permissions`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              permission_ids: permissionIdsToAssign,
+            }),
+          },
+        );
+
+        if (!assignResponse.ok) {
+          updateRankForm(appId, {
+            isSubmitting: false,
+            error: "Rank created, but permissions could not be assigned.",
+          });
+          return;
+        }
+      }
+
+      setUsersByApp((prev) => ({
+        ...prev,
+        [appId]: prev[appId]
+          ? {
+              ...prev[appId],
+              ranks: [...prev[appId].ranks, payload.data!],
+            }
+          : {
+              items: [],
+              ranks: [payload.data],
+              isLoading: false,
+              error: "",
+              emptyMessage: "",
+            },
+      }));
+
+      updateRankForm(appId, {
+        name: "",
+        permissionIds: [],
+        newPermissions: "",
+        isSubmitting: false,
+        error: "",
+      });
+
+      if (createdPermissions.length > 0) {
+        setPermissionsByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            items: [...(prev[appId]?.items ?? []), ...createdPermissions],
+            isLoading: false,
+            error: "",
+          },
+        }));
+      }
+
+      if (!licenseState.form.rankId) {
+        updateLicenseForm(appId, { rankId: payload.data.id });
+      }
+    } catch {
+      updateRankForm(appId, {
+        isSubmitting: false,
+        error: "Unable to create rank. Please try again.",
+      });
+    }
+  };
+
+  const createLicense = async (appId: string) => {
+    const licenseState = licensesByApp[appId];
+    if (!licenseState) return;
+
+    const { rankId, maxUses, durationSeconds, expiresAt } = licenseState.form;
+
+    if (!rankId) {
+      updateLicenseForm(appId, { error: "Select a rank for the license." });
+      return;
+    }
+
+    const parsedMaxUses =
+      maxUses.trim() === "" ? undefined : Number.parseInt(maxUses, 10);
+    if (parsedMaxUses !== undefined && (!Number.isFinite(parsedMaxUses) || parsedMaxUses <= 0)) {
+      updateLicenseForm(appId, { error: "Max uses must be a positive number." });
+      return;
+    }
+
+    const parsedDuration =
+      durationSeconds.trim() === "" ? undefined : Number.parseInt(durationSeconds, 10);
+    if (parsedDuration !== undefined && (!Number.isFinite(parsedDuration) || parsedDuration <= 0)) {
+      updateLicenseForm(appId, {
+        error: "Duration must be a positive number of seconds.",
+      });
+      return;
+    }
+
+    const expiresAtValue = expiresAt.trim();
+    if (expiresAtValue && Number.isNaN(Date.parse(expiresAtValue))) {
+      updateLicenseForm(appId, { error: "Expiration date is invalid." });
+      return;
+    }
+    const expiresAtIso = expiresAtValue ? new Date(expiresAtValue).toISOString() : undefined;
+
+    updateLicenseForm(appId, { isSubmitting: true, error: "", keys: [] });
+
+    try {
+      const response = await fetch(`/dashboard/apps/${appId}/licenses`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rank_id: rankId,
+          max_uses: parsedMaxUses,
+          duration_seconds: parsedDuration,
+          expires_at: expiresAtIso,
+        }),
+      });
+
+      if (!response.ok) {
+        updateLicenseForm(appId, {
+          isSubmitting: false,
+          error: "Unable to generate the license. Please try again.",
+        });
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: { license: License; keys: string[] };
+      };
+
+      if (!payload.success || !payload.data) {
+        updateLicenseForm(appId, {
+          isSubmitting: false,
+          error: "Unable to generate the license. Please try again.",
+        });
+        return;
+      }
+
+      setLicensesByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          items: [payload.data.license, ...prev[appId].items],
+          keysById: {
+            ...prev[appId].keysById,
+            [payload.data.license.id]: payload.data.keys[0] ?? "",
+          },
+          form: {
+            ...prev[appId].form,
+            isSubmitting: false,
+            error: "",
+            keys: payload.data.keys,
+            maxUses: "",
+            durationSeconds: "",
+            expiresAt: "",
+          },
+        },
+      }));
+    } catch {
+      updateLicenseForm(appId, {
+        isSubmitting: false,
+        error: "Unable to generate the license. Please try again.",
+      });
+    }
+  };
+
+  const copyLicenseKey = async (appId: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(key);
+    } catch {
+      updateLicenseForm(appId, {
+        error: "Unable to copy the license key. Please copy manually.",
+      });
+    }
+  };
+
+  const revokeLicense = async (appId: string, licenseId: string) => {
+    const confirmRevoke = window.confirm("Revoke this license?");
+    if (!confirmRevoke) return;
+
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            error: "",
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              permissionIds: [],
+              newPermissions: "",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: false,
+            isRankModalOpen: false,
+            isLicenseModalOpen: false,
+            keysById: {},
+          },
+    }));
+
+    try {
+      const response = await fetch(
+        `/dashboard/apps/${appId}/licenses/${licenseId}/revoke`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
+
+      if (!response.ok) {
+        setLicensesByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            ...prev[appId],
+            error: "Unable to revoke the license. Please try again.",
+          },
+        }));
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: { license: License };
+      };
+
+      if (!payload.success || !payload.data) {
+        setLicensesByApp((prev) => ({
+          ...prev,
+          [appId]: {
+            ...prev[appId],
+            error: "Unable to revoke the license. Please try again.",
+          },
+        }));
+        return;
+      }
+
+      setLicensesByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          items: prev[appId].items.map((license) =>
+            license.id === licenseId ? payload.data!.license : license,
+          ),
+        },
+      }));
+    } catch {
+      setLicensesByApp((prev) => ({
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          error: "Unable to revoke the license. Please try again.",
+        },
+      }));
+    }
+  };
+
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -690,6 +1510,9 @@ const HomePage = () => {
 
               const usersState = usersByApp[app.id];
               const apiKeyState = apiKeysByApp[app.id];
+              const licenseState = licensesByApp[app.id];
+              const ranks = usersState?.ranks ?? [];
+              const rankNameById = new Map(ranks.map((rank) => [rank.id, rank.name]));
 
               return (
                 <Card key={app.id}>
@@ -881,6 +1704,420 @@ const HomePage = () => {
                           )}
                         </div>
                         <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
+                                Licenses
+                              </h3>
+                              <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
+                                Create ranks and issue license codes.
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                className="h-9 w-auto px-4"
+                                onClick={() => toggleRankModal(app.id, true)}
+                              >
+                                Create rank
+                              </Button>
+                              <Button
+                                type="button"
+                                className="h-9 w-auto border border-[var(--theme-border)] bg-transparent px-4 text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                onClick={() => toggleLicenseModal(app.id, true)}
+                                disabled={ranks.length === 0}
+                              >
+                                Generate license
+                              </Button>
+                            </div>
+                          </div>
+                          {licenseState?.error ? (
+                            <p className="mt-2 text-sm text-rose-400" role="alert">
+                              {licenseState.error}
+                            </p>
+                          ) : null}
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs text-[var(--theme-muted-strong)]">
+                                {licenseState?.items.length ?? 0} licenses
+                              </p>
+                              <Button
+                                type="button"
+                                className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                onClick={() => toggleLicenseList(app.id)}
+                                disabled={!licenseState}
+                              >
+                                {licenseState?.showList ? "Hide list" : "Show list"}
+                              </Button>
+                            </div>
+                          </div>
+                          {licenseState?.showList ? (
+                            <div className="mt-3">
+                              {!licenseState || licenseState.isLoading ? (
+                                <p className="text-sm text-[var(--theme-muted-strong)]">
+                                  Loading licenses…
+                                </p>
+                              ) : licenseState.error ? (
+                                <p className="text-sm text-rose-400" role="alert">
+                                  {licenseState.error}
+                                </p>
+                              ) : licenseState.items.length === 0 ? (
+                                <p className="text-sm text-[var(--theme-muted-strong)]">
+                                  {licenseState.emptyMessage}
+                                </p>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-sm text-[var(--theme-fg)]">
+                                    <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
+                                      <tr>
+                                        <th className="py-2">Status</th>
+                                        <th className="py-2">Code</th>
+                                        <th className="py-2">Rank</th>
+                                        <th className="py-2">Uses</th>
+                                        <th className="py-2">Expires</th>
+                                        <th className="py-2">Created</th>
+                                        <th className="py-2">Redeemed</th>
+                                        <th className="py-2 text-right">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[var(--theme-border)]">
+                                      {licenseState.items.map((license) => (
+                                        <tr key={license.id} className="align-top">
+                                          <td className="py-3 capitalize">
+                                            {license.status}
+                                          </td>
+                                          <td className="py-3 font-mono text-xs">
+                                            {licenseState.keysById[license.id] ?? "—"}
+                                          </td>
+                                          <td className="py-3">
+                                            {rankNameById.get(license.rank_id) ??
+                                              license.rank_id}
+                                          </td>
+                                          <td className="py-3">
+                                            {license.use_count}
+                                            {license.max_uses
+                                              ? ` / ${license.max_uses}`
+                                              : " / ∞"}
+                                          </td>
+                                          <td className="py-3">
+                                            {license.expires_at
+                                              ? formatDate(license.expires_at)
+                                              : "—"}
+                                          </td>
+                                          <td className="py-3">
+                                            {formatDate(license.created_at)}
+                                          </td>
+                                          <td className="py-3">
+                                            {license.redeemed_at
+                                              ? formatDate(license.redeemed_at)
+                                              : "—"}
+                                          </td>
+                                          <td className="py-3 text-right">
+                                            <Button
+                                              type="button"
+                                              className="h-8 w-auto px-3"
+                                              disabled={license.status !== "active"}
+                                              onClick={() =>
+                                                revokeLicense(app.id, license.id)
+                                              }
+                                            >
+                                              Revoke
+                                            </Button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+                          {licenseState?.isRankModalOpen ? (
+                            <div
+                              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                              role="dialog"
+                              aria-modal="true"
+                              onClick={() => toggleRankModal(app.id, false)}
+                            >
+                              <div
+                                className="w-full max-w-2xl rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-6 text-left shadow-lg"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <h4 className="text-lg font-semibold text-[var(--theme-fg)]">
+                                      Create rank
+                                    </h4>
+                                    <p className="text-sm text-[var(--theme-muted-strong)]">
+                                      Assign permissions like moderator.kick or moderator.ban.
+                                    </p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    className="h-8 w-auto border border-[var(--theme-border)] bg-transparent px-3 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                    onClick={() => toggleRankModal(app.id, false)}
+                                  >
+                                    Close
+                                  </Button>
+                                </div>
+                                {licenseState.rankForm.error ? (
+                                  <p className="mt-3 text-sm text-rose-400" role="alert">
+                                    {licenseState.rankForm.error}
+                                  </p>
+                                ) : null}
+                                <div className="mt-4 space-y-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`rank-name-${app.id}`}>
+                                      Rank name
+                                    </Label>
+                                    <Input
+                                      id={`rank-name-${app.id}`}
+                                      value={licenseState.rankForm.name}
+                                      onChange={(event) =>
+                                        updateRankForm(app.id, {
+                                          name: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`rank-permissions-${app.id}`}>
+                                      Permissions
+                                    </Label>
+                                    {permissionsByApp[app.id]?.isLoading ? (
+                                      <p className="text-sm text-[var(--theme-muted-strong)]">
+                                        Loading permissions…
+                                      </p>
+                                    ) : permissionsByApp[app.id]?.error ? (
+                                      <p
+                                        className="text-sm text-rose-400"
+                                        role="alert"
+                                      >
+                                        {permissionsByApp[app.id].error}
+                                      </p>
+                                    ) : permissionsByApp[app.id]?.items.length ? (
+                                      <div className="grid gap-2 sm:grid-cols-2">
+                                        {permissionsByApp[app.id].items.map(
+                                          (permission) => (
+                                            <label
+                                              key={permission.id}
+                                              className="flex items-center gap-2 text-sm text-[var(--theme-fg)]"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)]"
+                                                checked={licenseState.rankForm.permissionIds.includes(
+                                                  permission.id,
+                                                )}
+                                                onChange={() =>
+                                                  togglePermissionSelection(
+                                                    app.id,
+                                                    permission.id,
+                                                  )
+                                                }
+                                              />
+                                              <span>{permission.name}</span>
+                                            </label>
+                                          ),
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-[var(--theme-muted-strong)]">
+                                        No permissions yet. Add some below.
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`rank-new-permissions-${app.id}`}>
+                                      Add permissions
+                                    </Label>
+                                    <Input
+                                      id={`rank-new-permissions-${app.id}`}
+                                      placeholder="moderator.kick, moderator.ban"
+                                      value={licenseState.rankForm.newPermissions}
+                                      onChange={(event) =>
+                                        updateRankForm(app.id, {
+                                          newPermissions: event.target.value,
+                                        })
+                                      }
+                                    />
+                                    <p className="text-xs text-[var(--theme-muted-strong)]">
+                                      Separate multiple permissions with commas or new lines.
+                                    </p>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <Button
+                                      type="button"
+                                      onClick={() => createRank(app.id)}
+                                      disabled={licenseState.rankForm.isSubmitting}
+                                      className="h-9 w-auto px-4"
+                                    >
+                                      {licenseState.rankForm.isSubmitting
+                                        ? "Creating…"
+                                        : "Create rank"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                          {licenseState?.isLicenseModalOpen ? (
+                            <div
+                              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                              role="dialog"
+                              aria-modal="true"
+                              onClick={() => toggleLicenseModal(app.id, false)}
+                            >
+                              <div
+                                className="w-full max-w-2xl rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-6 text-left shadow-lg"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <h4 className="text-lg font-semibold text-[var(--theme-fg)]">
+                                      Generate license
+                                    </h4>
+                                    <p className="text-sm text-[var(--theme-muted-strong)]">
+                                      Licenses grant the selected rank on redemption.
+                                    </p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    className="h-8 w-auto border border-[var(--theme-border)] bg-transparent px-3 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                    onClick={() => toggleLicenseModal(app.id, false)}
+                                  >
+                                    Close
+                                  </Button>
+                                </div>
+                                {licenseState.form.error ? (
+                                  <p className="mt-3 text-sm text-rose-400" role="alert">
+                                    {licenseState.form.error}
+                                  </p>
+                                ) : null}
+                                <div className="mt-4 space-y-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`license-rank-${app.id}`}>
+                                      Rank
+                                    </Label>
+                                    <select
+                                      id={`license-rank-${app.id}`}
+                                      className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                                      value={licenseState.form.rankId}
+                                      onChange={(event) =>
+                                        updateLicenseForm(app.id, {
+                                          rankId: event.target.value,
+                                        })
+                                      }
+                                      disabled={ranks.length === 0}
+                                    >
+                                      <option value="">
+                                        {ranks.length === 0
+                                          ? "Create a rank first"
+                                          : "Select a rank"}
+                                      </option>
+                                      {ranks.map((rank) => (
+                                        <option key={rank.id} value={rank.id}>
+                                          {rank.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`license-max-uses-${app.id}`}>
+                                        Max uses
+                                      </Label>
+                                      <Input
+                                        id={`license-max-uses-${app.id}`}
+                                        type="number"
+                                        min="1"
+                                        value={licenseState.form.maxUses}
+                                        onChange={(event) =>
+                                          updateLicenseForm(app.id, {
+                                            maxUses: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`license-duration-${app.id}`}>
+                                        Rank duration (seconds)
+                                      </Label>
+                                      <Input
+                                        id={`license-duration-${app.id}`}
+                                        type="number"
+                                        min="1"
+                                        value={licenseState.form.durationSeconds}
+                                        onChange={(event) =>
+                                          updateLicenseForm(app.id, {
+                                            durationSeconds: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                      <Label htmlFor={`license-expires-${app.id}`}>
+                                        License expiration
+                                      </Label>
+                                      <Input
+                                        id={`license-expires-${app.id}`}
+                                        type="datetime-local"
+                                        value={licenseState.form.expiresAt}
+                                        onChange={(event) =>
+                                          updateLicenseForm(app.id, {
+                                            expiresAt: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <Button
+                                      type="button"
+                                      onClick={() => createLicense(app.id)}
+                                      disabled={
+                                        licenseState.form.isSubmitting ||
+                                        ranks.length === 0
+                                      }
+                                      className="h-9 w-auto px-4"
+                                    >
+                                      {licenseState.form.isSubmitting
+                                        ? "Generating…"
+                                        : "Generate license"}
+                                    </Button>
+                                  </div>
+                                  {licenseState.form.keys.length ? (
+                                    <div className="space-y-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-3">
+                                      <p className="text-xs text-amber-500">
+                                        Copy these keys now — they won’t be shown again.
+                                      </p>
+                                      <div className="space-y-2 text-sm font-mono">
+                                        {licenseState.form.keys.map((key) => (
+                                          <div
+                                            key={key}
+                                            className="flex flex-wrap items-center justify-between gap-2"
+                                          >
+                                            <span className="break-all">{key}</span>
+                                            <Button
+                                              type="button"
+                                              className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                              onClick={() =>
+                                                copyLicenseKey(app.id, key)
+                                              }
+                                            >
+                                              Copy
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
                           <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
                             Registration requirements
                           </h3>
@@ -893,48 +2130,48 @@ const HomePage = () => {
                               <Label htmlFor={`email-policy-${app.id}`}>
                                 Email policy
                               </Label>
-                              <select
-                                id={`email-policy-${app.id}`}
-                                className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
-                                value={app.email_policy}
-                                onChange={(event) =>
-                                  updateRegistrationPolicies(app.id, {
-                                    email_policy: event.target
-                                      .value as Application["email_policy"],
-                                  })
-                                }
-                              >
-                                <option value="required">Required</option>
-                                <option value="optional">Optional</option>
-                                <option value="disabled">Disabled</option>
-                              </select>
+                              <label className="flex items-center gap-2 text-sm text-[var(--theme-fg)]">
+                                <input
+                                  id={`email-policy-${app.id}`}
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)]"
+                                  checked={app.email_policy === "required"}
+                                  onChange={(event) =>
+                                    updateRegistrationPolicies(app.id, {
+                                      email_policy: event.target.checked
+                                        ? "required"
+                                        : "optional",
+                                    })
+                                  }
+                                />
+                                Required
+                              </label>
                               <p className="text-xs text-[var(--theme-muted-strong)]">
-                                Required forces end users to provide email.
-                                Disabled rejects email on registration.
+                                Toggle on to require email during registration.
                               </p>
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor={`license-policy-${app.id}`}>
                                 License policy
                               </Label>
-                              <select
-                                id={`license-policy-${app.id}`}
-                                className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
-                                value={app.license_policy}
-                                onChange={(event) =>
-                                  updateRegistrationPolicies(app.id, {
-                                    license_policy: event.target
-                                      .value as Application["license_policy"],
-                                  })
-                                }
-                              >
-                                <option value="required">Required</option>
-                                <option value="optional">Optional</option>
-                                <option value="disabled">Disabled</option>
-                              </select>
+                              <label className="flex items-center gap-2 text-sm text-[var(--theme-fg)]">
+                                <input
+                                  id={`license-policy-${app.id}`}
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)]"
+                                  checked={app.license_policy === "required"}
+                                  onChange={(event) =>
+                                    updateRegistrationPolicies(app.id, {
+                                      license_policy: event.target.checked
+                                        ? "required"
+                                        : "optional",
+                                    })
+                                  }
+                                />
+                                Required
+                              </label>
                               <p className="text-xs text-[var(--theme-muted-strong)]">
-                                Required forces a license code during registration.
-                                Disabled rejects license codes on sign up.
+                                Toggle on to require a license code during registration.
                               </p>
                             </div>
                           </div>
