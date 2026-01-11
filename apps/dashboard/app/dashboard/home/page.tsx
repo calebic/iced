@@ -36,6 +36,8 @@ type User = {
 type Rank = {
   id: string;
   name: string;
+  description?: string | null;
+  priority?: number;
 };
 
 type UsersState = {
@@ -88,12 +90,22 @@ type LicenseFormState = {
   keys: string[];
 };
 
+type RankFormState = {
+  name: string;
+  description: string;
+  priority: string;
+  isSubmitting: boolean;
+  error: string;
+};
+
 type LicenseState = {
   items: License[];
   isLoading: boolean;
   error: string;
   emptyMessage: string;
   form: LicenseFormState;
+  rankForm: RankFormState;
+  showList: boolean;
 };
 
 const HomePage = () => {
@@ -381,6 +393,13 @@ const HomePage = () => {
     };
 
     const loadLicenses = async () => {
+      const initialRankForm: RankFormState = {
+        name: "",
+        description: "",
+        priority: "0",
+        isSubmitting: false,
+        error: "",
+      };
       const initialForm: LicenseFormState = {
         rankId: "",
         maxUses: "",
@@ -399,6 +418,8 @@ const HomePage = () => {
           error: "",
           emptyMessage: "No licenses generated yet.",
           form: prev[expandedAppId]?.form ?? initialForm,
+          rankForm: prev[expandedAppId]?.rankForm ?? initialRankForm,
+          showList: prev[expandedAppId]?.showList ?? false,
         },
       }));
 
@@ -725,8 +746,176 @@ const HomePage = () => {
               keys: [],
               ...updates,
             },
+            rankForm: {
+              name: "",
+              description: "",
+              priority: "0",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: false,
           },
     }));
+  };
+
+  const updateRankForm = (appId: string, updates: Partial<RankFormState>) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            rankForm: {
+              ...prev[appId].rankForm,
+              ...updates,
+            },
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              description: "",
+              priority: "0",
+              isSubmitting: false,
+              error: "",
+              ...updates,
+            },
+            showList: false,
+          },
+    }));
+  };
+
+  const toggleLicenseList = (appId: string) => {
+    setLicensesByApp((prev) => ({
+      ...prev,
+      [appId]: prev[appId]
+        ? {
+            ...prev[appId],
+            showList: !prev[appId].showList,
+          }
+        : {
+            items: [],
+            isLoading: false,
+            error: "",
+            emptyMessage: "",
+            form: {
+              rankId: "",
+              maxUses: "",
+              durationSeconds: "",
+              expiresAt: "",
+              isSubmitting: false,
+              error: "",
+              keys: [],
+            },
+            rankForm: {
+              name: "",
+              description: "",
+              priority: "0",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: true,
+          },
+    }));
+  };
+
+  const createRank = async (appId: string) => {
+    const licenseState = licensesByApp[appId];
+    if (!licenseState) return;
+
+    const { name, description, priority } = licenseState.rankForm;
+    if (!name.trim()) {
+      updateRankForm(appId, { error: "Enter a rank name." });
+      return;
+    }
+
+    const parsedPriority = Number.parseInt(priority, 10);
+    if (!Number.isFinite(parsedPriority)) {
+      updateRankForm(appId, { error: "Priority must be a number." });
+      return;
+    }
+
+    updateRankForm(appId, { isSubmitting: true, error: "" });
+
+    try {
+      const response = await fetch(`/dashboard/apps/${appId}/ranks`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          priority: parsedPriority,
+        }),
+      });
+
+      if (!response.ok) {
+        updateRankForm(appId, {
+          isSubmitting: false,
+          error: "Unable to create rank. Please try again.",
+        });
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        success: boolean;
+        data?: Rank;
+      };
+
+      if (!payload.success || !payload.data) {
+        updateRankForm(appId, {
+          isSubmitting: false,
+          error: "Unable to create rank. Please try again.",
+        });
+        return;
+      }
+
+      setUsersByApp((prev) => ({
+        ...prev,
+        [appId]: prev[appId]
+          ? {
+              ...prev[appId],
+              ranks: [...prev[appId].ranks, payload.data!],
+            }
+          : {
+              items: [],
+              ranks: [payload.data],
+              isLoading: false,
+              error: "",
+              emptyMessage: "",
+            },
+      }));
+
+      updateRankForm(appId, {
+        name: "",
+        description: "",
+        priority: "0",
+        isSubmitting: false,
+        error: "",
+      });
+
+      if (!licenseState.form.rankId) {
+        updateLicenseForm(appId, { rankId: payload.data.id });
+      }
+    } catch {
+      updateRankForm(appId, {
+        isSubmitting: false,
+        error: "Unable to create rank. Please try again.",
+      });
+    }
   };
 
   const createLicense = async (appId: string) => {
@@ -860,6 +1049,14 @@ const HomePage = () => {
               error: "",
               keys: [],
             },
+            rankForm: {
+              name: "",
+              description: "",
+              priority: "0",
+              isSubmitting: false,
+              error: "",
+            },
+            showList: false,
           },
     }));
 
@@ -1247,205 +1444,306 @@ const HomePage = () => {
                             Licenses
                           </h3>
                           <p className="mt-1 text-sm text-[var(--theme-muted-strong)]">
-                            Generate license codes for end users to redeem.
+                            Create ranks and generate license codes for end users.
                           </p>
                           {licenseState?.error ? (
                             <p className="mt-2 text-sm text-rose-400" role="alert">
                               {licenseState.error}
                             </p>
                           ) : null}
-                          <div className="mt-4 space-y-3">
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <div className="space-y-2">
-                                <Label htmlFor={`license-rank-${app.id}`}>
-                                  Rank
-                                </Label>
-                                <select
-                                  id={`license-rank-${app.id}`}
-                                  className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
-                                  value={licenseState?.form.rankId ?? ""}
-                                  onChange={(event) =>
-                                    updateLicenseForm(app.id, {
-                                      rankId: event.target.value,
-                                    })
-                                  }
-                                >
-                                  <option value="">Select a rank</option>
-                                  {ranks.map((rank) => (
-                                    <option key={rank.id} value={rank.id}>
-                                      {rank.name}
-                                    </option>
-                                  ))}
-                                </select>
+                          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                            <div className="space-y-4 rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] p-4">
+                              <div className="space-y-1">
+                                <h4 className="text-sm font-semibold text-[var(--theme-fg)]">
+                                  Create rank
+                                </h4>
                                 <p className="text-xs text-[var(--theme-muted-strong)]">
-                                  Licenses always assign a rank on redemption.
+                                  Ranks are required before you can issue licenses.
                                 </p>
                               </div>
-                              <div className="space-y-2">
-                                <Label htmlFor={`license-max-uses-${app.id}`}>
-                                  Max uses (optional)
-                                </Label>
-                                <Input
-                                  id={`license-max-uses-${app.id}`}
-                                  type="number"
-                                  min="1"
-                                  value={licenseState?.form.maxUses ?? ""}
-                                  onChange={(event) =>
-                                    updateLicenseForm(app.id, {
-                                      maxUses: event.target.value,
-                                    })
-                                  }
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor={`license-duration-${app.id}`}>
-                                  Rank duration seconds (optional)
-                                </Label>
-                                <Input
-                                  id={`license-duration-${app.id}`}
-                                  type="number"
-                                  min="1"
-                                  value={licenseState?.form.durationSeconds ?? ""}
-                                  onChange={(event) =>
-                                    updateLicenseForm(app.id, {
-                                      durationSeconds: event.target.value,
-                                    })
-                                  }
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor={`license-expires-${app.id}`}>
-                                  License expiration (optional)
-                                </Label>
-                                <Input
-                                  id={`license-expires-${app.id}`}
-                                  type="datetime-local"
-                                  value={licenseState?.form.expiresAt ?? ""}
-                                  onChange={(event) =>
-                                    updateLicenseForm(app.id, {
-                                      expiresAt: event.target.value,
-                                    })
-                                  }
-                                />
-                              </div>
-                            </div>
-                            {licenseState?.form.error ? (
-                              <p className="text-sm text-rose-400" role="alert">
-                                {licenseState.form.error}
-                              </p>
-                            ) : null}
-                            <div>
-                              <Button
-                                type="button"
-                                onClick={() => createLicense(app.id)}
-                                disabled={licenseState?.form.isSubmitting}
-                                className="h-9 w-auto px-4"
-                              >
-                                {licenseState?.form.isSubmitting
-                                  ? "Generating…"
-                                  : "Generate license"}
-                              </Button>
-                            </div>
-                            {licenseState?.form.keys.length ? (
-                              <div className="space-y-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] p-3">
-                                <p className="text-xs text-amber-500">
-                                  Copy these keys now — they won’t be shown again.
+                              {licenseState?.rankForm.error ? (
+                                <p className="text-sm text-rose-400" role="alert">
+                                  {licenseState.rankForm.error}
                                 </p>
-                                <div className="space-y-2 text-sm font-mono">
-                                  {licenseState.form.keys.map((key) => (
-                                    <div
-                                      key={key}
-                                      className="flex flex-wrap items-center justify-between gap-2"
-                                    >
-                                      <span className="break-all">{key}</span>
-                                      <Button
-                                        type="button"
-                                        className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
-                                        onClick={() => copyLicenseKey(app.id, key)}
-                                      >
-                                        Copy
-                                      </Button>
-                                    </div>
-                                  ))}
+                              ) : null}
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`rank-name-${app.id}`}>
+                                    Name
+                                  </Label>
+                                  <Input
+                                    id={`rank-name-${app.id}`}
+                                    value={licenseState?.rankForm.name ?? ""}
+                                    onChange={(event) =>
+                                      updateRankForm(app.id, {
+                                        name: event.target.value,
+                                      })
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor={`rank-priority-${app.id}`}>
+                                    Priority
+                                  </Label>
+                                  <Input
+                                    id={`rank-priority-${app.id}`}
+                                    type="number"
+                                    value={licenseState?.rankForm.priority ?? ""}
+                                    onChange={(event) =>
+                                      updateRankForm(app.id, {
+                                        priority: event.target.value,
+                                      })
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                  <Label htmlFor={`rank-description-${app.id}`}>
+                                    Description (optional)
+                                  </Label>
+                                  <Input
+                                    id={`rank-description-${app.id}`}
+                                    value={licenseState?.rankForm.description ?? ""}
+                                    onChange={(event) =>
+                                      updateRankForm(app.id, {
+                                        description: event.target.value,
+                                      })
+                                    }
+                                  />
                                 </div>
                               </div>
-                            ) : null}
+                              <Button
+                                type="button"
+                                onClick={() => createRank(app.id)}
+                                disabled={licenseState?.rankForm.isSubmitting}
+                                className="h-9 w-fit px-4"
+                              >
+                                {licenseState?.rankForm.isSubmitting
+                                  ? "Creating…"
+                                  : "Create rank"}
+                              </Button>
+                            </div>
+                            <div className="space-y-4 rounded-md border border-[var(--theme-border)] bg-[var(--theme-input-bg)] p-4">
+                              <div className="space-y-1">
+                                <h4 className="text-sm font-semibold text-[var(--theme-fg)]">
+                                  Generate license
+                                </h4>
+                                <p className="text-xs text-[var(--theme-muted-strong)]">
+                                  Licenses grant the selected rank on redemption.
+                                </p>
+                              </div>
+                              <div className="space-y-3">
+                                <div className="space-y-2">
+                                  <Label htmlFor={`license-rank-${app.id}`}>
+                                    Rank
+                                  </Label>
+                                  <select
+                                    id={`license-rank-${app.id}`}
+                                    className="h-9 w-full rounded-md border border-[var(--theme-input-border)] bg-[var(--theme-input-bg)] px-2 text-sm text-[var(--theme-input-text)]"
+                                    value={licenseState?.form.rankId ?? ""}
+                                    onChange={(event) =>
+                                      updateLicenseForm(app.id, {
+                                        rankId: event.target.value,
+                                      })
+                                    }
+                                    disabled={ranks.length === 0}
+                                  >
+                                    <option value="">
+                                      {ranks.length === 0
+                                        ? "Create a rank first"
+                                        : "Select a rank"}
+                                    </option>
+                                    {ranks.map((rank) => (
+                                      <option key={rank.id} value={rank.id}>
+                                        {rank.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`license-max-uses-${app.id}`}>
+                                      Max uses
+                                    </Label>
+                                    <Input
+                                      id={`license-max-uses-${app.id}`}
+                                      type="number"
+                                      min="1"
+                                      value={licenseState?.form.maxUses ?? ""}
+                                      onChange={(event) =>
+                                        updateLicenseForm(app.id, {
+                                          maxUses: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`license-duration-${app.id}`}>
+                                      Rank duration (seconds)
+                                    </Label>
+                                    <Input
+                                      id={`license-duration-${app.id}`}
+                                      type="number"
+                                      min="1"
+                                      value={licenseState?.form.durationSeconds ?? ""}
+                                      onChange={(event) =>
+                                        updateLicenseForm(app.id, {
+                                          durationSeconds: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-2 md:col-span-2">
+                                    <Label htmlFor={`license-expires-${app.id}`}>
+                                      License expiration
+                                    </Label>
+                                    <Input
+                                      id={`license-expires-${app.id}`}
+                                      type="datetime-local"
+                                      value={licenseState?.form.expiresAt ?? ""}
+                                      onChange={(event) =>
+                                        updateLicenseForm(app.id, {
+                                          expiresAt: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                {licenseState?.form.error ? (
+                                  <p className="text-sm text-rose-400" role="alert">
+                                    {licenseState.form.error}
+                                  </p>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  onClick={() => createLicense(app.id)}
+                                  disabled={
+                                    licenseState?.form.isSubmitting || ranks.length === 0
+                                  }
+                                  className="h-9 w-fit px-4"
+                                >
+                                  {licenseState?.form.isSubmitting
+                                    ? "Generating…"
+                                    : "Generate license"}
+                                </Button>
+                              </div>
+                              {licenseState?.form.keys.length ? (
+                                <div className="space-y-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-3">
+                                  <p className="text-xs text-amber-500">
+                                    Copy these keys now — they won’t be shown again.
+                                  </p>
+                                  <div className="space-y-2 text-sm font-mono">
+                                    {licenseState.form.keys.map((key) => (
+                                      <div
+                                        key={key}
+                                        className="flex flex-wrap items-center justify-between gap-2"
+                                      >
+                                        <span className="break-all">{key}</span>
+                                        <Button
+                                          type="button"
+                                          className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                          onClick={() => copyLicenseKey(app.id, key)}
+                                        >
+                                          Copy
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                           <div className="mt-4">
-                            {!licenseState || licenseState.isLoading ? (
-                              <p className="text-sm text-[var(--theme-muted-strong)]">
-                                Loading licenses…
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs text-[var(--theme-muted-strong)]">
+                                {licenseState?.items.length ?? 0} licenses
                               </p>
-                            ) : licenseState.error ? (
-                              <p className="text-sm text-rose-400" role="alert">
-                                {licenseState.error}
-                              </p>
-                            ) : licenseState.items.length === 0 ? (
-                              <p className="text-sm text-[var(--theme-muted-strong)]">
-                                {licenseState.emptyMessage}
-                              </p>
-                            ) : (
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm text-[var(--theme-fg)]">
-                                  <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
-                                    <tr>
-                                      <th className="py-2">Status</th>
-                                      <th className="py-2">Rank</th>
-                                      <th className="py-2">Uses</th>
-                                      <th className="py-2">Expires</th>
-                                      <th className="py-2">Created</th>
-                                      <th className="py-2">Redeemed</th>
-                                      <th className="py-2 text-right">Actions</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-[var(--theme-border)]">
-                                    {licenseState.items.map((license) => (
-                                      <tr key={license.id} className="align-top">
-                                        <td className="py-3 capitalize">
-                                          {license.status}
-                                        </td>
-                                        <td className="py-3">
-                                          {rankNameById.get(license.rank_id) ??
-                                            license.rank_id}
-                                        </td>
-                                        <td className="py-3">
-                                          {license.use_count}
-                                          {license.max_uses
-                                            ? ` / ${license.max_uses}`
-                                            : " / ∞"}
-                                        </td>
-                                        <td className="py-3">
-                                          {license.expires_at
-                                            ? formatDate(license.expires_at)
-                                            : "—"}
-                                        </td>
-                                        <td className="py-3">
-                                          {formatDate(license.created_at)}
-                                        </td>
-                                        <td className="py-3">
-                                          {license.redeemed_at
-                                            ? formatDate(license.redeemed_at)
-                                            : "—"}
-                                        </td>
-                                        <td className="py-3 text-right">
-                                          <Button
-                                            type="button"
-                                            className="h-8 w-auto px-3"
-                                            disabled={license.status !== "active"}
-                                            onClick={() =>
-                                              revokeLicense(app.id, license.id)
-                                            }
-                                          >
-                                            Revoke
-                                          </Button>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
+                              <Button
+                                type="button"
+                                className="h-7 w-auto border border-[var(--theme-border)] bg-transparent px-2 text-[11px] text-[var(--theme-fg)] hover:bg-[var(--theme-panel-bg)]"
+                                onClick={() => toggleLicenseList(app.id)}
+                                disabled={!licenseState}
+                              >
+                                {licenseState?.showList ? "Hide list" : "Show list"}
+                              </Button>
+                            </div>
                           </div>
+                          {licenseState?.showList ? (
+                            <div className="mt-3">
+                              {!licenseState || licenseState.isLoading ? (
+                                <p className="text-sm text-[var(--theme-muted-strong)]">
+                                  Loading licenses…
+                                </p>
+                              ) : licenseState.error ? (
+                                <p className="text-sm text-rose-400" role="alert">
+                                  {licenseState.error}
+                                </p>
+                              ) : licenseState.items.length === 0 ? (
+                                <p className="text-sm text-[var(--theme-muted-strong)]">
+                                  {licenseState.emptyMessage}
+                                </p>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-sm text-[var(--theme-fg)]">
+                                    <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
+                                      <tr>
+                                        <th className="py-2">Status</th>
+                                        <th className="py-2">Rank</th>
+                                        <th className="py-2">Uses</th>
+                                        <th className="py-2">Expires</th>
+                                        <th className="py-2">Created</th>
+                                        <th className="py-2">Redeemed</th>
+                                        <th className="py-2 text-right">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[var(--theme-border)]">
+                                      {licenseState.items.map((license) => (
+                                        <tr key={license.id} className="align-top">
+                                          <td className="py-3 capitalize">
+                                            {license.status}
+                                          </td>
+                                          <td className="py-3">
+                                            {rankNameById.get(license.rank_id) ??
+                                              license.rank_id}
+                                          </td>
+                                          <td className="py-3">
+                                            {license.use_count}
+                                            {license.max_uses
+                                              ? ` / ${license.max_uses}`
+                                              : " / ∞"}
+                                          </td>
+                                          <td className="py-3">
+                                            {license.expires_at
+                                              ? formatDate(license.expires_at)
+                                              : "—"}
+                                          </td>
+                                          <td className="py-3">
+                                            {formatDate(license.created_at)}
+                                          </td>
+                                          <td className="py-3">
+                                            {license.redeemed_at
+                                              ? formatDate(license.redeemed_at)
+                                              : "—"}
+                                          </td>
+                                          <td className="py-3 text-right">
+                                            <Button
+                                              type="button"
+                                              className="h-8 w-auto px-3"
+                                              disabled={license.status !== "active"}
+                                              onClick={() =>
+                                                revokeLicense(app.id, license.id)
+                                              }
+                                            >
+                                              Revoke
+                                            </Button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-bg)] p-4">
                           <h3 className="text-sm font-semibold text-[var(--theme-fg)]">
