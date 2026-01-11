@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,6 +137,10 @@ const HomePage = () => {
   const [permissionsByApp, setPermissionsByApp] = useState<
     Record<string, PermissionsState>
   >({});
+  const loadedUsersRef = useRef(new Set<string>());
+  const loadedApiKeyRef = useRef(new Set<string>());
+  const loadedLicensesRef = useRef(new Set<string>());
+  const loadedPermissionsRef = useRef(new Set<string>());
 
   const getMaskedKey = (last4?: string | null) =>
     last4 ? `••••••${last4}` : "••••••";
@@ -221,10 +225,10 @@ const HomePage = () => {
       return;
     }
 
-    const shouldLoadUsers = !usersByApp[expandedAppId];
-    const shouldLoadApiKey = !apiKeysByApp[expandedAppId];
-    const shouldLoadLicenses = !licensesByApp[expandedAppId];
-    const shouldLoadPermissions = !permissionsByApp[expandedAppId];
+    const shouldLoadUsers = !loadedUsersRef.current.has(expandedAppId);
+    const shouldLoadApiKey = !loadedApiKeyRef.current.has(expandedAppId);
+    const shouldLoadLicenses = !loadedLicensesRef.current.has(expandedAppId);
+    const shouldLoadPermissions = !loadedPermissionsRef.current.has(expandedAppId);
 
     if (
       !shouldLoadUsers &&
@@ -236,6 +240,8 @@ const HomePage = () => {
     }
 
     const loadUsers = async () => {
+      loadedUsersRef.current.add(expandedAppId);
+      loadedPermissionsRef.current.add(expandedAppId);
       setUsersByApp((prev) => ({
         ...prev,
         [expandedAppId]: {
@@ -356,6 +362,7 @@ const HomePage = () => {
     };
 
     const loadApiKey = async () => {
+      loadedApiKeyRef.current.add(expandedAppId);
       setApiKeysByApp((prev) => ({
         ...prev,
         [expandedAppId]: {
@@ -444,6 +451,7 @@ const HomePage = () => {
     };
 
     const loadLicenses = async () => {
+      loadedLicensesRef.current.add(expandedAppId);
       const initialRankForm: RankFormState = {
         name: "",
         permissionIds: [],
@@ -531,7 +539,7 @@ const HomePage = () => {
     if (shouldLoadLicenses) {
       void loadLicenses();
     }
-  }, [expandedAppId, usersByApp, apiKeysByApp, licensesByApp, permissionsByApp]);
+  }, [expandedAppId]);
 
   const updateUser = async (
     appId: string,
