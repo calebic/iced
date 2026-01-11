@@ -106,6 +106,7 @@ type LicenseState = {
   showList: boolean;
   isRankModalOpen: boolean;
   isLicenseModalOpen: boolean;
+  keysById: Record<string, string>;
 };
 
 type Permission = {
@@ -481,6 +482,7 @@ const HomePage = () => {
           showList: prev[expandedAppId]?.showList ?? false,
           isRankModalOpen: prev[expandedAppId]?.isRankModalOpen ?? false,
           isLicenseModalOpen: prev[expandedAppId]?.isLicenseModalOpen ?? false,
+          keysById: prev[expandedAppId]?.keysById ?? {},
         },
       }));
 
@@ -817,6 +819,7 @@ const HomePage = () => {
             showList: false,
             isRankModalOpen: false,
             isLicenseModalOpen: false,
+            keysById: {},
           },
     }));
   };
@@ -857,6 +860,7 @@ const HomePage = () => {
             showList: false,
             isRankModalOpen: false,
             isLicenseModalOpen: false,
+            keysById: {},
           },
     }));
   };
@@ -893,6 +897,7 @@ const HomePage = () => {
             showList: true,
             isRankModalOpen: false,
             isLicenseModalOpen: false,
+            keysById: {},
           },
     }));
   };
@@ -935,6 +940,7 @@ const HomePage = () => {
             showList: false,
             isRankModalOpen: isOpen,
             isLicenseModalOpen: false,
+            keysById: {},
           },
     }));
   };
@@ -978,6 +984,7 @@ const HomePage = () => {
             showList: false,
             isRankModalOpen: false,
             isLicenseModalOpen: isOpen,
+            keysById: {},
           },
     }));
   };
@@ -1245,6 +1252,10 @@ const HomePage = () => {
         [appId]: {
           ...prev[appId],
           items: [payload.data.license, ...prev[appId].items],
+          keysById: {
+            ...prev[appId].keysById,
+            [payload.data.license.id]: payload.data.keys[0] ?? "",
+          },
           form: {
             ...prev[appId].form,
             isSubmitting: false,
@@ -1301,12 +1312,15 @@ const HomePage = () => {
             },
             rankForm: {
               name: "",
-              description: "",
-              priority: "0",
+              permissionIds: [],
+              newPermissions: "",
               isSubmitting: false,
               error: "",
             },
             showList: false,
+            isRankModalOpen: false,
+            isLicenseModalOpen: false,
+            keysById: {},
           },
     }));
 
@@ -1757,6 +1771,7 @@ const HomePage = () => {
                                     <thead className="text-xs uppercase text-[var(--theme-muted-strong)]">
                                       <tr>
                                         <th className="py-2">Status</th>
+                                        <th className="py-2">Code</th>
                                         <th className="py-2">Rank</th>
                                         <th className="py-2">Uses</th>
                                         <th className="py-2">Expires</th>
@@ -1770,6 +1785,9 @@ const HomePage = () => {
                                         <tr key={license.id} className="align-top">
                                           <td className="py-3 capitalize">
                                             {license.status}
+                                          </td>
+                                          <td className="py-3 font-mono text-xs">
+                                            {licenseState.keysById[license.id] ?? "—"}
                                           </td>
                                           <td className="py-3">
                                             {rankNameById.get(license.rank_id) ??
